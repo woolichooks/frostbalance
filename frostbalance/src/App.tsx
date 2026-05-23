@@ -20,6 +20,18 @@ import { Timer } from './components/Timer';
 import { DayBriefing } from './components/DayBriefing';
 import { Penny, type PennyPose } from './components/Penny';
 import { FrostOverlay } from './components/FrostOverlay';
+import { AudioControls } from './components/AudioControls';
+import {
+  ensureAudioReady,
+  playEurekaChime,
+  playHintBurn,
+  playIceTap,
+  playSleepWhoosh,
+  playTick,
+  playTimeoutHorn,
+  playWrongThunk,
+} from './audio/sfx';
+import { setMusicState } from './audio/music';
 import './App.css';
 
 type Phase = 'briefing' | 'playing' | 'solved' | 'timeout' | 'game-over';
@@ -67,6 +79,34 @@ function App() {
   const currentTier: Tier = tierForDay(day);
   const tierConfig = TIER_CONFIGS[currentTier];
 
+  // Drive background music from the phase
+  useEffect(() => {
+    if (phase === 'briefing') setMusicState('briefing');
+    else if (phase === 'playing') setMusicState('playing');
+    else if (phase === 'solved') setMusicState('solved');
+    else if (phase === 'timeout') setMusicState('briefing');
+    else if (phase === 'game-over') setMusicState('gameover');
+  }, [phase]);
+
+  // Final-10s tick
+  const lastTickSecond = useRef<number>(-1);
+  useEffect(() => {
+    if (phase !== 'playing') {
+      lastTickSecond.current = -1;
+      return;
+    }
+    const remaining = puzzle.timeLimitMs - elapsedMs;
+    if (remaining <= 0 || remaining > 10_000) {
+      lastTickSecond.current = -1;
+      return;
+    }
+    const currentSecond = Math.ceil(remaining / 1000);
+    if (currentSecond !== lastTickSecond.current) {
+      lastTickSecond.current = currentSecond;
+      playTick();
+    }
+  }, [phase, elapsedMs, puzzle.timeLimitMs]);
+
   // Timeout detection
   useEffect(() => {
     if (phase === 'playing' && elapsedMs >= puzzle.timeLimitMs) {
@@ -74,11 +114,13 @@ function App() {
       setLastSolveMs(puzzle.timeLimitMs);
       setLastReward(0);
       setPhase('timeout');
+      playTimeoutHorn();
     }
   }, [phase, elapsedMs, puzzle.timeLimitMs]);
 
   const beginDay = useCallback(() => {
     if (!chosenResource) return;
+    ensureAudioReady();
     setPuzzle(generatePuzzle(currentTier));
     setSelectedRowId(null);
     setSelectedFixId(null);
@@ -96,6 +138,12 @@ function App() {
     if (ruledOut.has(id)) return;
     setSelectedRowId(id);
     setSelectedFixId(null);
+    playIceTap();
+  };
+
+  const onPickFix = (id: string) => {
+    setSelectedFixId(id);
+    playIceTap();
   };
 
   const onUseHint = () => {
@@ -118,6 +166,7 @@ function App() {
       setSelectedRowId(null);
       setSelectedFixId(null);
     }
+    playHintBurn();
   };
 
   const onSubmit = () => {
@@ -132,6 +181,7 @@ function App() {
       setLastSolveMs(elapsed);
       setLastReward(computeReward(elapsed, puzzle.timeLimitMs, tierConfig.rewardBonus));
       setPhase('solved');
+      playEurekaChime();
     } else {
       setWrongAttempts((n) => n + 1);
       setPenaltyMs((p) => p + WRONG_PENALTY_MS);
@@ -139,10 +189,12 @@ function App() {
       setWrongFlash(true);
       if (flashTimeout.current) window.clearTimeout(flashTimeout.current);
       flashTimeout.current = window.setTimeout(() => setWrongFlash(false), 600);
+      playWrongThunk();
     }
   };
 
   const onSleep = () => {
+    playSleepWhoosh();
     let next = resources;
     if (chosenResource && lastReward > 0) {
       next = grantReward(next, chosenResource, lastReward);
@@ -202,6 +254,7 @@ function App() {
         </defs>
       </svg>
       <FrostOverlay fraction={frostFraction} />
+      <AudioControls />
       <div className={`penny-stage penny-stage-${pennyPose}`} aria-hidden="true">
         <Penny pose={pennyPose} />
       </div>
@@ -386,7 +439,7 @@ function App() {
                           name="fix"
                           value={f.id}
                           checked={checked}
-                          onChange={() => setSelectedFixId(f.id)}
+                          onChange={() => onPickFix(f.id)}
                         />
                         {f.label}
                       </label>
