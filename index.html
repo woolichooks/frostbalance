@@ -101,6 +101,12 @@
     transition: background 0.15s;
   }
   button:hover { background: var(--ink); color: var(--paper); }
+  button.mute {
+    margin-top: 0;
+    padding: 2px 10px;
+    font-size: 13px;
+    font-style: normal;
+  }
   .controls {
     font-size: 13px;
     opacity: 0.7;
@@ -124,15 +130,18 @@
   <div id="hud">
     <span>Donations: <b id="score">0</b></span>
     <span>Lives: <b id="lives">3</b></span>
-    <span>Level: <b id="level">1</b></span>
+    <span>FY: <b id="level">1</b></span>
+    <span>Best: <b id="highscore">0</b></span>
+    <span><button id="mute-btn" class="mute">♪ on</button></span>
   </div>
   <canvas id="game" width="608" height="672"></canvas>
   <div class="legend">
     <span><span class="swatch" style="background:var(--ink)"></span> Donation</span>
     <span><span class="swatch" style="background:var(--grant)"></span> Matching Grant</span>
     <span><span class="swatch" style="background:var(--threat)"></span> Financial Threat</span>
+    <span><span class="swatch" style="background:#3a7d44"></span> Bonus Form</span>
   </div>
-  <div class="controls">Arrow keys or WASD to move. Eat a grant to absorb threats.</div>
+  <div class="controls">Arrow keys / WASD on desktop. Swipe on mobile. Eat a grant to absorb threats.</div>
 </div>
 
 <div id="overlay">
@@ -144,37 +153,108 @@
 
 <script>
 (() => {
-  // ---------- Maze ----------
-  // # wall, . donation dot, o grant (power pellet), - empty (ghost house / tunnel)
+  // ---------- Mazes ----------
+  // # wall, . donation dot, o grant (power pellet), - empty (tunnel/ghost house)
   // _ ghost spawn marker (treated as empty)
-  const MAZE_SRC = [
-    "###################",
-    "#........#........#",
-    "#o##.###.#.###.##o#",
-    "#.................#",
-    "#.##.#.#####.#.##.#",
-    "#....#...#...#....#",
-    "####.###.#.###.####",
-    "####.#.......#.####",
-    "####.#.##-##.#.####",
-    "-------#-_-#-------",
-    "####.#.#####.#.####",
-    "####.#.......#.####",
-    "####.#.#####.#.####",
-    "#........#........#",
-    "#.##.###.#.###.##.#",
-    "#o.#...........#.o#",
-    "##.#.#.#####.#.#.##",
-    "#....#...#...#....#",
-    "#.######.#.######.#",
-    "#.................#",
-    "###################",
+  // All mazes must be 19 cols x 21 rows.
+  const MAZES = [
+    {
+      name: "Community Center",
+      grid: [
+        "###################",
+        "#........#........#",
+        "#o##.###.#.###.##o#",
+        "#.................#",
+        "#.##.#.#####.#.##.#",
+        "#....#...#...#....#",
+        "####.###.#.###.####",
+        "####.#.......#.####",
+        "####.#.##-##.#.####",
+        "-------#-_-#-------",
+        "####.#.#####.#.####",
+        "####.#.......#.####",
+        "####.#.#####.#.####",
+        "#........#........#",
+        "#.##.###.#.###.##.#",
+        "#o.#...........#.o#",
+        "##.#.#.#####.#.#.##",
+        "#....#...#...#....#",
+        "#.######.#.######.#",
+        "#.................#",
+        "###################",
+      ],
+      spawn: { c: 9, r: 15 },
+    },
+    {
+      name: "Arts Foundation",
+      grid: [
+        "###################",
+        "#o...............o#",
+        "#.###.#######.###.#",
+        "#.#.............#.#",
+        "#.#.###.###.###.#.#",
+        "#.....#.....#.....#",
+        "####.###.#.###.####",
+        "####.#.#####.#.####",
+        "####.#.##-##.#.####",
+        "-------#-_-#-------",
+        "####.#.##-##.#.####",
+        "####.#.#####.#.####",
+        "####.###.#.###.####",
+        "#.....#.....#.....#",
+        "#.#.###.###.###.#.#",
+        "#.#.............#.#",
+        "#.###.#######.###.#",
+        "#o....#.....#....o#",
+        "#.###.#.###.#.###.#",
+        "#.................#",
+        "###################",
+      ],
+      spawn: { c: 9, r: 19 },
+    },
+    {
+      name: "Food Bank",
+      grid: [
+        "###################",
+        "#........#........#",
+        "#.###.##.#.##.###.#",
+        "#o................#",
+        "#.#.###.###.###.#.#",
+        "#.#...............#",
+        "#.#.###.#.#.###.#.#",
+        "#.....#.#.#.#.....#",
+        "####.##.#-#.##.####",
+        "-------#-_-#-------",
+        "####.##.#.#.##.####",
+        "#.....#.....#.....#",
+        "#.###.#.###.#.###.#",
+        "#.#.............#.#",
+        "#.#.###.###.###.#.#",
+        "#.................#",
+        "#.##.#######.##.###",
+        "#....#.....#....#o#",
+        "#.##.#.###.#.##.#.#",
+        "#................o#",
+        "###################",
+      ],
+      spawn: { c: 9, r: 15 },
+    },
   ];
+
+  let currentMazeIdx = 0;
+  let MAZE_SRC = MAZES[0].grid;
+  let SPAWN = MAZES[0].spawn;
   const COLS = MAZE_SRC[0].length;
   const ROWS = MAZE_SRC.length;
   const TILE = 32;
   const W = COLS * TILE;
   const H = ROWS * TILE;
+
+  function selectMaze(level) {
+    currentMazeIdx = (level - 1) % MAZES.length;
+    MAZE_SRC = MAZES[currentMazeIdx].grid;
+    SPAWN = MAZES[currentMazeIdx].spawn;
+  }
 
   const canvas = document.getElementById('game');
   canvas.width = W; canvas.height = H;
@@ -188,6 +268,8 @@
   function resetGrid() {
     grid = [];
     totalPellets = 0;
+    pelletsEaten = 0;
+    bonus = null;
     for (let r = 0; r < ROWS; r++) {
       const row = [];
       for (let c = 0; c < COLS; c++) {
@@ -255,8 +337,11 @@
 
   // Position is in pixels; entity moves smoothly. Tile coords derived.
   const SPEED = 1.4;
-  const GHOST_SPEED = 1.15;
-  const FRIGHTENED_SPEED = 0.75;
+  const BASE_GHOST_SPEED = 1.15;
+  const BASE_FRIGHTENED_SPEED = 0.75;
+  function ghostSpeed() { return Math.min(SPEED - 0.05, BASE_GHOST_SPEED + (level - 1) * 0.04); }
+  function frightenedSpeed() { return Math.max(0.55, BASE_FRIGHTENED_SPEED - (level - 1) * 0.02); }
+  function frightenedDuration() { return Math.max(160, 360 - (level - 1) * 25); }
 
   const player = {
     x: 9 * TILE + TILE / 2,
@@ -297,6 +382,112 @@
   let level = 1;
   let running = false;
   let frightenedTotal = 0;
+  let pelletsEaten = 0;
+  let bonus = null;
+  let popups = [];
+  let highScore = 0;
+  try { highScore = parseInt(localStorage.getItem('ledger-muncher-best') || '0', 10) || 0; } catch (e) {}
+
+  // ---------- Bonus items (Phase 3) ----------
+  const BONUS_TYPES = [
+    { name: 'Form 990', points: 100, color: '#3a7d44', glyph: '990' },
+    { name: 'Endowment', points: 300, color: '#1f6f8b', glyph: 'EN' },
+    { name: 'Restricted Fund', points: 500, color: '#7a4f9c', glyph: 'RF' },
+    { name: 'Major Gift', points: 1000, color: '#c1440e', glyph: '$$' },
+  ];
+  const BONUS_THRESHOLDS = [70, 170];
+
+  function maybeSpawnBonus() {
+    if (bonus) return;
+    if (!BONUS_THRESHOLDS.includes(pelletsEaten)) return;
+    const idx = Math.min(BONUS_TYPES.length - 1, (level - 1) + (pelletsEaten === BONUS_THRESHOLDS[1] ? 1 : 0));
+    const type = BONUS_TYPES[idx % BONUS_TYPES.length];
+    bonus = {
+      ...type,
+      x: 9 * TILE + TILE / 2,
+      y: 12 * TILE + TILE / 2,
+      timer: 600,
+      pulse: 0,
+    };
+  }
+
+  function updateBonus() {
+    if (!bonus) return;
+    bonus.timer--;
+    bonus.pulse += 0.12;
+    if (bonus.timer <= 0) { bonus = null; return; }
+    const d = Math.hypot(bonus.x - player.x, bonus.y - player.y);
+    if (d < TILE * 0.7 && player.alive) {
+      score += bonus.points;
+      pushPopup(bonus.x, bonus.y, '+' + bonus.points + ' ' + bonus.name, bonus.color);
+      playBonusSound();
+      bonus = null;
+      updateHud();
+    }
+  }
+
+  // ---------- Score popups (Phase 3) ----------
+  function pushPopup(x, y, text, color) {
+    popups.push({ x, y, text, color: color || '#2b2b2b', life: 60, vy: -0.7 });
+  }
+
+  function updatePopups() {
+    for (const p of popups) { p.y += p.vy; p.life--; }
+    popups = popups.filter(p => p.life > 0);
+  }
+
+  // ---------- Sound (Phase 4) ----------
+  let muted = false;
+  let audioCtx = null;
+  try { muted = localStorage.getItem('ledger-muncher-muted') === '1'; } catch (e) {}
+
+  function ensureAudio() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  function beep(freq, dur, type = 'square', vol = 0.05) {
+    if (muted || !audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g); g.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    g.gain.setValueAtTime(vol, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    o.start(now); o.stop(now + dur);
+  }
+
+  let chompFlip = false;
+  function playDot() { chompFlip = !chompFlip; beep(chompFlip ? 520 : 440, 0.06, 'square', 0.03); }
+  function playGrant() { beep(660, 0.18, 'triangle', 0.06); setTimeout(() => beep(880, 0.18, 'triangle', 0.06), 120); }
+  function playThreatEaten() { beep(900, 0.08, 'sawtooth', 0.05); setTimeout(() => beep(1200, 0.1, 'sawtooth', 0.05), 80); }
+  function playDeath() {
+    if (muted || !audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.value = 440;
+    g.gain.value = 0.07;
+    o.connect(g); g.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    o.frequency.exponentialRampToValueAtTime(110, now + 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.8);
+    o.start(now); o.stop(now + 0.8);
+  }
+  function playBonusSound() {
+    beep(880, 0.1, 'triangle', 0.06);
+    setTimeout(() => beep(1100, 0.1, 'triangle', 0.06), 80);
+    setTimeout(() => beep(1320, 0.14, 'triangle', 0.06), 160);
+  }
+  function playLevelUp() {
+    [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.18, 'triangle', 0.06), i * 110));
+  }
 
   const TIPS = [
     "Restricted funds: they have trust issues. Spend them only on what donors specified.",
@@ -325,6 +516,31 @@
     if (k === 'arrowright' || k === 'd') player.nextDir = { x: 1, y: 0 };
   });
   window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+  window.addEventListener('keydown', () => ensureAudio(), { once: true });
+
+  // Touch swipe controls (Phase 4)
+  let touchStart = null;
+  function setDirFromVector(dx, dy) {
+    if (Math.abs(dx) < 18 && Math.abs(dy) < 18) return;
+    if (Math.abs(dx) > Math.abs(dy)) player.nextDir = { x: dx > 0 ? 1 : -1, y: 0 };
+    else player.nextDir = { x: 0, y: dy > 0 ? 1 : -1 };
+  }
+  canvas.addEventListener('touchstart', (e) => {
+    ensureAudio();
+    const t = e.touches[0];
+    touchStart = { x: t.clientX, y: t.clientY };
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener('touchmove', (e) => {
+    if (!touchStart) return;
+    const t = e.touches[0];
+    setDirFromVector(t.clientX - touchStart.x, t.clientY - touchStart.y);
+    if (Math.hypot(t.clientX - touchStart.x, t.clientY - touchStart.y) > 30) {
+      touchStart = { x: t.clientX, y: t.clientY };
+    }
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener('touchend', () => { touchStart = null; });
 
   // ---------- Movement ----------
   function atTileCenter(e) {
@@ -373,13 +589,22 @@
       grid[cr][cc] = EMPTY;
       score += 10;
       totalPellets--;
+      pelletsEaten++;
+      pushPopup(player.x, player.y - 8, '+10', '#2b2b2b');
+      playDot();
+      maybeSpawnBonus();
       updateHud();
     } else if (t === GRANT) {
       grid[cr][cc] = EMPTY;
       score += 50;
       totalPellets--;
-      frightenedTotal = 360;
-      ghosts.forEach(g => { if (!g.eaten) g.frightened = 360; });
+      pelletsEaten++;
+      const fdur = frightenedDuration();
+      frightenedTotal = fdur;
+      ghosts.forEach(g => { if (!g.eaten) g.frightened = fdur; });
+      pushPopup(player.x, player.y - 8, '+50 grant!', '#d4a017');
+      playGrant();
+      maybeSpawnBonus();
       updateHud();
     }
     if (totalPellets <= 0) levelComplete();
@@ -426,7 +651,7 @@
         const dx = GHOST_HOME.x - g.x, dy = GHOST_HOME.y - g.y;
         if (Math.hypot(dx, dy) < 4) { g.eaten = false; g.frightened = 0; g.dir = { x: 0, y: -1 }; continue; }
         chooseGhostDir(g, GHOST_HOME);
-        moveEntity(g, GHOST_SPEED * 1.6);
+        moveEntity(g, ghostSpeed() * 1.6);
         continue;
       }
       let target;
@@ -444,7 +669,7 @@
         }
       }
       chooseGhostDir(g, target);
-      moveEntity(g, g.frightened > 0 ? FRIGHTENED_SPEED : GHOST_SPEED);
+      moveEntity(g, g.frightened > 0 ? frightenedSpeed() : ghostSpeed());
     }
   }
 
@@ -458,8 +683,11 @@
           g.eaten = true;
           g.frightened = 0;
           score += 200;
+          pushPopup(g.x, g.y, '+200 reconciled', '#4a6fa5');
+          playThreatEaten();
           updateHud();
         } else {
+          playDeath();
           loseLife();
           return;
         }
@@ -482,18 +710,22 @@
   }
 
   function resetPositions() {
-    player.x = 9 * TILE + TILE / 2;
-    player.y = 15 * TILE + TILE / 2;
+    player.x = SPAWN.c * TILE + TILE / 2;
+    player.y = SPAWN.r * TILE + TILE / 2;
     player.dir = { x: 0, y: 0 };
     player.nextDir = { x: 0, y: 0 };
     ghosts = [0,1,2,3].map(makeGhost);
+    popups = [];
   }
 
   function levelComplete() {
     running = false;
+    playLevelUp();
+    saveHighScore();
     level++;
+    selectMaze(level);
     showOverlay("End of Fiscal Year " + (level - 1),
-      "Books balanced. Donors appeased. Moving to FY " + level + ".",
+      "Books balanced. Donors appeased. Next up: " + MAZES[currentMazeIdx].name + " (FY " + level + ").",
       pickTip(), "Begin Next Year", () => {
         resetGrid();
         resetPositions();
@@ -501,12 +733,23 @@
       });
   }
 
+  function saveHighScore() {
+    if (score > highScore) {
+      highScore = score;
+      try { localStorage.setItem('ledger-muncher-best', String(highScore)); } catch (e) {}
+      updateHud();
+    }
+  }
+
   function gameOver() {
     running = false;
+    saveHighScore();
+    const beat = score >= highScore && score > 0;
     showOverlay("Final Audit",
-      "The threats caught up with your treasurer. Final score: " + score + ".",
+      (beat ? "New record! " : "") + "The threats caught up with your treasurer. Final score: " + score + ". Best: " + highScore + ".",
       pickTip(), "Try Again", () => {
         score = 0; lives = 3; level = 1;
+        selectMaze(level);
         updateHud();
         resetGrid();
         resetPositions();
@@ -658,12 +901,48 @@
     }
   }
 
+  function drawBonus() {
+    if (!bonus) return;
+    const wob = 1 + Math.sin(bonus.pulse) * 0.5;
+    const r = 11 + wob;
+    ctx.strokeStyle = bonus.color;
+    ctx.lineWidth = 2.2;
+    sketchRect(bonus.x - r, bonus.y - r, r * 2, r * 2, 2, 0.7);
+    // Diagonal page-fold
+    sketchLine(bonus.x + r - 5, bonus.y - r, bonus.x + r, bonus.y - r + 5, 1, 0.4);
+    ctx.fillStyle = bonus.color;
+    ctx.font = 'bold 9px Georgia';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(bonus.glyph, bonus.x, bonus.y + 1);
+    // Fading timer indicator (thin line under)
+    const frac = bonus.timer / 600;
+    ctx.strokeStyle = 'rgba(43,43,43,0.35)';
+    ctx.lineWidth = 1.2;
+    sketchLine(bonus.x - r, bonus.y + r + 4, bonus.x - r + 2 * r * frac, bonus.y + r + 4, 1, 0.2);
+  }
+
+  function drawPopups() {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const p of popups) {
+      const alpha = Math.min(1, p.life / 30);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.font = 'italic bold 12px Georgia';
+      ctx.fillText(p.text, p.x, p.y);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function render() {
     ctx.clearRect(0, 0, W, H);
     drawMaze();
     drawPellets();
+    drawBonus();
     if (player.alive) drawPlayer();
     ghosts.forEach(drawGhost);
+    drawPopups();
   }
 
   // ---------- HUD / Overlay ----------
@@ -671,7 +950,18 @@
     document.getElementById('score').textContent = score;
     document.getElementById('lives').textContent = lives;
     document.getElementById('level').textContent = level;
+    document.getElementById('highscore').textContent = highScore;
   }
+
+  const muteBtn = document.getElementById('mute-btn');
+  function refreshMuteBtn() { muteBtn.textContent = muted ? '♪ off' : '♪ on'; }
+  refreshMuteBtn();
+  muteBtn.addEventListener('click', () => {
+    muted = !muted;
+    try { localStorage.setItem('ledger-muncher-muted', muted ? '1' : '0'); } catch (e) {}
+    refreshMuteBtn();
+    if (!muted) ensureAudio();
+  });
 
   const overlay = document.getElementById('overlay');
   const oTitle = document.getElementById('overlay-title');
@@ -691,6 +981,7 @@
   function hideOverlay() { overlay.classList.add('hidden'); }
 
   oBtn.addEventListener('click', () => {
+    ensureAudio();
     hideOverlay();
     if (overlayCb) overlayCb();
   });
@@ -702,16 +993,19 @@
     if (!running) { render(); return; }
     updatePlayer();
     updateGhosts();
+    updateBonus();
+    updatePopups();
     checkCollisions();
     render();
   }
 
   // ---------- Init ----------
+  selectMaze(1);
   resetGrid();
   resetPositions();
   updateHud();
   showOverlay("Ledger Muncher",
-    "Guide your nonprofit's treasurer through the budget maze. Collect donations, grab matching grants, and avoid Audit, Overhead Creep, Donor Churn, and Compliance Risk.",
+    "Guide your nonprofit's treasurer through the budget maze. Collect donations, grab matching grants, watch for bonus forms, and avoid Audit, Overhead Creep, Donor Churn, and Compliance Risk. Each fiscal year cycles to a new maze.",
     pickTip(), "Start Fiscal Year",
     () => { running = true; });
   requestAnimationFrame(loop);
