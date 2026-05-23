@@ -55,10 +55,10 @@ export const setMusicState = (state: MusicState): void => {
   const node = ensureEl();
   if (!node) return;
   const url = MUSIC_TRACKS[state];
-  // Same URL across states: keep playing — no re-fetch, no restart.
+  // Same URL already playing: keep going — no re-fetch, no restart.
   if (url === currentUrl) return;
-  currentUrl = url;
   if (!url) {
+    currentUrl = null;
     fade(0, 300, () => {
       node.pause();
       node.src = '';
@@ -68,9 +68,13 @@ export const setMusicState = (state: MusicState): void => {
   fade(0, 250, () => {
     node.src = url;
     node.play().then(() => {
+      // Mark as current only after a real start so a blocked-autoplay
+      // attempt doesn't poison future retries with the same URL.
+      currentUrl = url;
       fade(effectiveVolume(), 600);
     }).catch(() => {
-      // Autoplay still blocked — will retry on next state change after a gesture.
+      // Autoplay blocked or load failed. Leave currentUrl unchanged so
+      // the next setMusicState call retries the same URL.
     });
   });
 };
