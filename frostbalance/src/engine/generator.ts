@@ -1,52 +1,15 @@
 import { monthEndLabel, monthStartLabel, round2 } from './format';
 import { TIER_CONFIGS, type Tier } from './survival';
+import { pickLocation, type Location, type ScenarioTemplate } from './locations';
 import type {
   Account,
   Discrepancy,
   FixOption,
   Puzzle,
+  PuzzleError,
   Scenario,
   Transaction,
 } from './types';
-
-type ScenarioTemplate = {
-  prepaidAccount: Account;
-  expenseAccount: Account;
-  vendors: string[];
-  itemNoun: string;
-  annualAmounts: number[];
-};
-
-const TEMPLATES: ScenarioTemplate[] = [
-  {
-    prepaidAccount: 'Prepaid Insurance',
-    expenseAccount: 'Insurance Expense',
-    vendors: ['Northwind Mutual', 'Glacier Casualty', 'Polaris Indemnity'],
-    itemNoun: 'insurance',
-    annualAmounts: [1200, 2400, 3600, 4800, 6000],
-  },
-  {
-    prepaidAccount: 'Prepaid Rent',
-    expenseAccount: 'Rent Expense',
-    vendors: ['Tundra Realty', 'Permafrost Properties', 'Iceshelf Holdings'],
-    itemNoun: 'rent',
-    annualAmounts: [2400, 3600, 6000, 7200, 12000],
-  },
-  {
-    prepaidAccount: 'Prepaid Software',
-    expenseAccount: 'Software Expense',
-    vendors: ['LedgerLight', 'QuickFrost SaaS', 'Aurora Tools'],
-    itemNoun: 'SaaS license',
-    annualAmounts: [1200, 2400, 3600, 4800],
-  },
-  {
-    prepaidAccount: 'Prepaid Maintenance',
-    expenseAccount: 'Maintenance Expense',
-    vendors: ['Boreal HVAC', 'Snowdrift Maintenance Co.'],
-    itemNoun: 'maintenance contract',
-    annualAmounts: [1200, 2400, 3600],
-  },
-];
 
 const DECOY_DESCRIPTIONS = [
   'Reclassification per audit memo',
@@ -57,6 +20,8 @@ const DECOY_DESCRIPTIONS = [
   'Quarter-end adjustment',
   'Reallocated from suspense account',
   'CFO override — see workpaper',
+  'Per controller, posted to clear suspense',
+  'Allocation from intercompany clearing',
 ];
 
 const DISCREPANCIES: Discrepancy[] = [0.01, 0.02, 0.11, 0.2, 1.5];
@@ -115,11 +80,8 @@ const buildFixes = (
   return { fixes, correctFixId: correctId };
 };
 
-export const generatePuzzle = (tier: Tier = 1): Puzzle => {
-  const cfg = TIER_CONFIGS[tier];
-  const template = pick(TEMPLATES);
+const buildScenario = (template: ScenarioTemplate, cfg: ReturnType<typeof getCfg>): { scenario: Scenario; openingEntry: Transaction; amortizationEntries: Transaction[]; monthly: number; annual: number } => {
   const vendor = pick(template.vendors);
-  // Annual amounts produce clean monthlies for both 12 and 24 month contracts
   const annualPool =
     cfg.monthsTotal === 24
       ? template.annualAmounts.map((a) => a * 2)
@@ -163,47 +125,95 @@ export const generatePuzzle = (tier: Tier = 1): Puzzle => {
     });
   }
 
-  // Inject error
+  return { scenario, openingEntry, amortizationEntries, monthly, annual };
+};
+
+const getCfg = (tier: Tier) => TIER_CONFIGS[tier];
+
+const injectError = (
+  amortizationEntries: Transaction[],
+  excludeIds: Set<string>,
+  expenseAccount: Account,
+  forcedDirection?: 1 | -1,
+): { error: PuzzleError; index: number; observedAmount: number; discrepancy: number; direction: 1 | -1 } => {
+  const candidates = amortizationEntries
+    .map((_, idx) => idx)
+    .filter((idx) => !excludeIds.has(amortizationEntries[idx].id));
+  const errorIdx = pick(candidates);
   const discrepancy = pick(DISCREPANCIES);
-  const direction = Math.random() < 0.5 ? 1 : -1;
-  const errorIdx = Math.floor(Math.random() * amortizationEntries.length);
+  const direction: 1 | -1 = forcedDirection ?? (Math.random() < 0.5 ? 1 : -1);
   const correctAmount = amortizationEntries[errorIdx].amount;
   const observedAmount = round2(correctAmount + direction * discrepancy);
   amortizationEntries[errorIdx] = {
     ...amortizationEntries[errorIdx],
     amount: observedAmount,
   };
-  const errorTransactionId = amortizationEntries[errorIdx].id;
+  const txnId = amortizationEntries[errorIdx].id;
+  const { fixes, correctFixId } = buildFixes(txnId, correctAmount, observedAmount, expenseAccount);
+  return {
+    error: { txnId, correctAmount, fixes, correctFixId },
+    index: errorIdx,
+    observedAmount,
+    discrepancy,
+    direction,
+  };
+};
 
-  // Sprinkle decoy descriptions on non-error rows
-  const decoyCount = Math.min(
-    cfg.decoys,
-    Math.max(0, amortizationEntries.length - 1),
-  );
-  const decoyCandidates = amortizationEntries
+const applyDecoys = (
+  amortizationEntries: Transaction[],
+  excludeIds: Set<string>,
+  decoyCount: number,
+): void => {
+  const candidates = amortizationEntries
     .map((_, idx) => idx)
-    .filter((idx) => amortizationEntries[idx].id !== errorTransactionId);
-  const decoyTargets = shuffle(decoyCandidates).slice(0, decoyCount);
-  const decoyPool = shuffle(DECOY_DESCRIPTIONS);
-  decoyTargets.forEach((idx, i) => {
+    .filter((idx) => !excludeIds.has(amortizationEntries[idx].id));
+  const targets = shuffle(candidates).slice(0, Math.min(decoyCount, candidates.length));
+  const pool = shuffle(DECOY_DESCRIPTIONS);
+  targets.forEach((idx, i) => {
     amortizationEntries[idx] = {
       ...amortizationEntries[idx],
-      description: decoyPool[i % decoyPool.length],
+      description: pool[i % pool.length],
       decoy: true,
     };
   });
+};
+
+export const generatePuzzle = (tier: Tier = 1, day = 1): Puzzle => {
+  const cfg = getCfg(tier);
+  const location: Location = pickLocation(day);
+  const template = pick(location.templates);
+  const { scenario, openingEntry, amortizationEntries, monthly, annual } = buildScenario(
+    template,
+    cfg,
+  );
+
+  // How many errors? Boss tier = 2; everyone else = 1.
+  // For the boss, force both errors in the same direction so the discrepancy
+  // can't cancel to zero — players need a real magnitude hint.
+  const errorCount = tier === 5 ? 2 : 1;
+  const bossDirection: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
+  const injectedErrors: PuzzleError[] = [];
+  const errorIds = new Set<string>();
+  for (let i = 0; i < errorCount; i++) {
+    const result = injectError(
+      amortizationEntries,
+      errorIds,
+      template.expenseAccount,
+      tier === 5 ? bossDirection : undefined,
+    );
+    injectedErrors.push(result.error);
+    errorIds.add(result.error.txnId);
+  }
+
+  // Decoys: never overlap with error rows.
+  applyDecoys(amortizationEntries, errorIds, cfg.decoys);
 
   const totalAmortized = amortizationEntries.reduce((s, t) => s + t.amount, 0);
   const scheduleBalance = round2(annual - totalAmortized);
-  const trialBalance = round2(annual - monthly * monthsElapsed);
+  const trialBalance = round2(annual - monthly * scenario.monthsElapsed);
   const signedDiscrepancy = round2(scheduleBalance - trialBalance);
 
-  const { fixes, correctFixId } = buildFixes(
-    errorTransactionId,
-    correctAmount,
-    observedAmount,
-    template.expenseAccount,
-  );
+  const [first, ...rest] = injectedErrors;
 
   return {
     id: `puzzle-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -216,9 +226,43 @@ export const generatePuzzle = (tier: Tier = 1): Puzzle => {
     trialBalance,
     scheduleBalance,
     discrepancy: signedDiscrepancy,
-    errorTransactionId,
-    correctAmount,
-    fixes,
-    correctFixId,
+    errorTransactionId: first.txnId,
+    correctAmount: first.correctAmount,
+    fixes: first.fixes,
+    correctFixId: first.correctFixId,
+    pendingErrors: rest,
+    totalErrors: injectedErrors.length,
+    currentErrorIndex: 0,
+    locationName: location.name,
+    locationBlurb: location.blurb,
+  };
+};
+
+/**
+ * Apply the player's correct fix to the current puzzle and advance to
+ * the next pending error (boss puzzles). Returns the updated puzzle.
+ * Caller should only invoke this when there is at least one pending error.
+ */
+export const advanceToNextError = (puzzle: Puzzle): Puzzle => {
+  if (puzzle.pendingErrors.length === 0) return puzzle;
+  const fixedEntries = puzzle.amortizationEntries.map((t) =>
+    t.id === puzzle.errorTransactionId ? { ...t, amount: puzzle.correctAmount } : t,
+  );
+  const nextError = puzzle.pendingErrors[0];
+  const remaining = puzzle.pendingErrors.slice(1);
+  const totalAmortized = fixedEntries.reduce((s, t) => s + t.amount, 0);
+  const scheduleBalance = round2(puzzle.scenario.annualAmount - totalAmortized);
+  const signedDiscrepancy = round2(scheduleBalance - puzzle.trialBalance);
+  return {
+    ...puzzle,
+    amortizationEntries: fixedEntries,
+    scheduleBalance,
+    discrepancy: signedDiscrepancy,
+    errorTransactionId: nextError.txnId,
+    correctAmount: nextError.correctAmount,
+    fixes: nextError.fixes,
+    correctFixId: nextError.correctFixId,
+    pendingErrors: remaining,
+    currentErrorIndex: puzzle.currentErrorIndex + 1,
   };
 };

@@ -821,3 +821,72 @@ tr.ruled-out td {
 .audio-controls input[type='range']:disabled {
   opacity: 0.3;
 }
+
+/* Journal + locations on briefing */
+.journal {
+  font-family: var(--body);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-soft);
+  background: rgba(28, 58, 79, 0.06);
+  border-left: 3px solid var(--rust);
+  padding: 10px 14px;
+  margin: 6px 0 14px;
+}
+
+.locations {
+  margin: 14px 0 6px;
+  padding: 12px 14px;
+  border: 1px dashed var(--frost-line);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.locations-label {
+  font-family: var(--display);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--frost-deep);
+  display: block;
+  margin-bottom: 8px;
+}
+
+.locations ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.locations li {
+  font-size: 13px;
+  padding: 4px 0;
+  border-bottom: 1px dotted rgba(58, 100, 120, 0.25);
+}
+
+.locations li:last-child {
+  border-bottom: none;
+}
+
+.loc-blurb {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* Scenario location + boss progress */
+.scenario-location {
+  font-family: var(--body);
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 4px 0 0;
+}
+
+.scenario-location strong {
+  color: var(--frost-deep);
+}
+
+.boss-tag {
+  font-family: var(--display);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--rust);
+}

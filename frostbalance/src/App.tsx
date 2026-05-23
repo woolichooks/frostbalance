@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { generatePuzzle } from './engine/generator';
+import { advanceToNextError, generatePuzzle } from './engine/generator';
+import { journalEntry } from './engine/journal';
 import type { Puzzle } from './engine/types';
 import { fmt, signedFmt } from './engine/format';
 import type { Resource, Tier } from './engine/survival';
@@ -41,7 +42,7 @@ function App() {
   const [resources, setResources] = useState(INITIAL_RESOURCES);
   const [phase, setPhase] = useState<Phase>('briefing');
   const [chosenResource, setChosenResource] = useState<Resource | null>(null);
-  const [puzzle, setPuzzle] = useState<Puzzle>(() => generatePuzzle(1));
+  const [puzzle, setPuzzle] = useState<Puzzle>(() => generatePuzzle(1, 1));
 
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [selectedFixId, setSelectedFixId] = useState<string | null>(null);
@@ -124,7 +125,7 @@ function App() {
   const beginDay = useCallback(() => {
     if (!chosenResource) return;
     ensureAudioReady();
-    setPuzzle(generatePuzzle(currentTier));
+    setPuzzle(generatePuzzle(currentTier, day));
     setSelectedRowId(null);
     setSelectedFixId(null);
     setWrongAttempts(0);
@@ -134,7 +135,7 @@ function App() {
     setTimerFrozenAt(null);
     setTimerStart(Date.now());
     setPhase('playing');
-  }, [chosenResource, currentTier]);
+  }, [chosenResource, currentTier, day]);
 
   const onPickRow = (id: string) => {
     if (phase !== 'playing') return;
@@ -178,6 +179,14 @@ function App() {
     const rowRight = selectedRowId === puzzle.errorTransactionId;
     const fixRight = selectedFixId === puzzle.correctFixId;
     if (rowRight && fixRight) {
+      // Boss puzzle: more errors waiting. Advance and keep playing.
+      if (puzzle.pendingErrors.length > 0) {
+        setPuzzle((p) => advanceToNextError(p));
+        setSelectedRowId(null);
+        setSelectedFixId(null);
+        playIceTap();
+        return;
+      }
       const frozen = Date.now();
       setTimerFrozenAt(frozen);
       const elapsed = frozen - (timerStart ?? frozen) + penaltyMs;
@@ -276,6 +285,7 @@ function App() {
           day={day}
           resources={resources}
           selected={chosenResource}
+          journalLine={journalEntry(day)}
           onSelect={setChosenResource}
           onBegin={beginDay}
         />
@@ -285,7 +295,17 @@ function App() {
         <>
           <section className="card scenario">
             <div className="scenario-header">
-              <h2>Today's reconciliation</h2>
+              <div>
+                <h2>Today's reconciliation</h2>
+                <p className="scenario-location">
+                  Scavenged from <strong>{puzzle.locationName}</strong>
+                  {puzzle.totalErrors > 1 && (
+                    <span className="boss-tag">
+                      {' '}· FINAL AUDIT · Error {puzzle.currentErrorIndex + 1} of {puzzle.totalErrors}
+                    </span>
+                  )}
+                </p>
+              </div>
               <Timer
                 elapsedMs={elapsedMs}
                 limitMs={puzzle.timeLimitMs}
@@ -303,7 +323,9 @@ function App() {
               <strong>{signedFmt(puzzle.discrepancy)}</strong>.
             </p>
             <p className="prompt">
-              Find the offending row, then pick the fix.
+              {puzzle.totalErrors > 1
+                ? 'Two errors hide in this consolidated audit. Fix them one at a time. The timer never stops.'
+                : 'Find the offending row, then pick the fix.'}
               {wrongAttempts > 0 && (
                 <span className="penalty-note">
                   {' '}

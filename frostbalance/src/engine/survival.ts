@@ -27,7 +27,7 @@ export const TIME_LIMIT_MS = 90_000;
 export const WRONG_PENALTY_MS = 10_000;
 export const HINT_FUEL_COST = 1;
 
-export type Tier = 1 | 2 | 3 | 4;
+export type Tier = 1 | 2 | 3 | 4 | 5;
 
 export type TierConfig = {
   tier: Tier;
@@ -91,13 +91,26 @@ export const TIER_CONFIGS: Record<Tier, TierConfig> = {
     hintsAllowed: 2,
     rewardBonus: 2,
   },
+  5: {
+    tier: 5,
+    label: 'Final audit',
+    flavor: 'Two errors hidden in one consolidated trial balance. Fix them in sequence — the timer never stops.',
+    minEntries: 20,
+    maxEntries: 24,
+    monthsTotal: 24,
+    decoys: 4,
+    timeLimitMs: 180_000,
+    hintsAllowed: 3,
+    rewardBonus: 3,
+  },
 };
 
 export const tierForDay = (day: number): Tier => {
   if (day <= 3) return 1;
   if (day <= 7) return 2;
   if (day <= 12) return 3;
-  return 4;
+  if (day <= 17) return 4;
+  return 5;
 };
 
 export const computeReward = (
