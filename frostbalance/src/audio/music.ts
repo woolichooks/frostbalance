@@ -1,7 +1,7 @@
 import { MUSIC_TRACKS, type MusicState } from './config';
 
 let el: HTMLAudioElement | null = null;
-let currentState: MusicState | null = null;
+let currentUrl: string | null = null;
 let volume = 0.25;
 let muted = false;
 let ducked = false;
@@ -52,11 +52,12 @@ const fade = (target: number, durationMs: number, onDone?: () => void): void => 
 };
 
 export const setMusicState = (state: MusicState): void => {
-  if (state === currentState) return;
-  currentState = state;
   const node = ensureEl();
   if (!node) return;
   const url = MUSIC_TRACKS[state];
+  // Same URL across states: keep playing — no re-fetch, no restart.
+  if (url === currentUrl) return;
+  currentUrl = url;
   if (!url) {
     fade(0, 300, () => {
       node.pause();
