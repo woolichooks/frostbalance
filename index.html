@@ -546,7 +546,7 @@
   function atTileCenter(e) {
     const cx = Math.floor(e.x / TILE) * TILE + TILE / 2;
     const cy = Math.floor(e.y / TILE) * TILE + TILE / 2;
-    return Math.abs(e.x - cx) < 1.5 && Math.abs(e.y - cy) < 1.5;
+    return Math.abs(e.x - cx) < 0.75 && Math.abs(e.y - cy) < 0.75;
   }
 
   function canMove(e, dir) {
