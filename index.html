@@ -254,9 +254,9 @@
   function isWall(c, r) { return tileAt(c, r) === WALL; }
 
   // Position is in pixels; entity moves smoothly. Tile coords derived.
-  const SPEED = 2.2;
-  const GHOST_SPEED = 1.9;
-  const FRIGHTENED_SPEED = 1.2;
+  const SPEED = 1.4;
+  const GHOST_SPEED = 1.15;
+  const FRIGHTENED_SPEED = 0.75;
 
   const player = {
     x: 9 * TILE + TILE / 2,
