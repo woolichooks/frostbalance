@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ledger Muncher</title>
+<style>
+  :root {
+    --ink: #2b2b2b;
+    --paper: #f5f1e8;
+    --accent: #c1440e;
+    --grant: #d4a017;
+    --threat: #6b4e8a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    height: 100%;
+    overflow: hidden;
+  }
+  #wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    padding: 12px;
+    gap: 8px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 28px;
+    letter-spacing: 1px;
+    font-weight: normal;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 4px;
+    font-style: italic;
+  }
+  #hud {
+    display: flex;
+    gap: 24px;
+    font-size: 16px;
+    width: 100%;
+    max-width: 600px;
+    justify-content: space-between;
+    padding: 0 8px;
+  }
+  #hud span b { font-weight: bold; }
+  canvas {
+    background: var(--paper);
+    display: block;
+    max-width: 100%;
+    height: auto;
+    image-rendering: auto;
+  }
+  #overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(245, 241, 232, 0.96);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+    z-index: 10;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h2 {
+    font-size: 32px;
+    font-style: italic;
+    margin: 0 0 16px;
+    font-weight: normal;
+  }
+  #overlay p {
+    max-width: 480px;
+    line-height: 1.5;
+    margin: 8px 0;
+  }
+  #overlay .tip {
+    font-style: italic;
+    border-left: 3px solid var(--accent);
+    padding: 8px 16px;
+    margin: 16px 0;
+    text-align: left;
+    max-width: 480px;
+  }
+  button {
+    margin-top: 16px;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    color: var(--ink);
+    padding: 10px 24px;
+    font-family: inherit;
+    font-size: 16px;
+    font-style: italic;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover { background: var(--ink); color: var(--paper); }
+  .controls {
+    font-size: 13px;
+    opacity: 0.7;
+    margin-top: 8px;
+  }
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    font-size: 13px;
+    margin-top: 4px;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .swatch { width: 12px; height: 12px; border: 1.5px solid var(--ink); display: inline-block; border-radius: 50%; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>Ledger Muncher</h1>
+  <div id="hud">
+    <span>Donations: <b id="score">0</b></span>
+    <span>Lives: <b id="lives">3</b></span>
+    <span>Level: <b id="level">1</b></span>
+  </div>
+  <canvas id="game" width="608" height="672"></canvas>
+  <div class="legend">
+    <span><span class="swatch" style="background:var(--ink)"></span> Donation</span>
+    <span><span class="swatch" style="background:var(--grant)"></span> Matching Grant</span>
+    <span><span class="swatch" style="background:var(--threat)"></span> Financial Threat</span>
+  </div>
+  <div class="controls">Arrow keys or WASD to move. Eat a grant to absorb threats.</div>
+</div>
+
+<div id="overlay">
+  <h2 id="overlay-title">Ledger Muncher</h2>
+  <p id="overlay-body">Guide your nonprofit's treasurer through the budget maze. Collect donations, grab matching grants, and avoid Audit, Overhead Creep, Donor Churn, and Compliance Risk.</p>
+  <div class="tip" id="overlay-tip">Tip: Grants briefly turn threats into reconcilable line items. Munch them for bonus revenue.</div>
+  <button id="overlay-btn">Start Fiscal Year</button>
+</div>
+
+<script>
+(() => {
+  // ---------- Maze ----------
+  // # wall, . donation dot, o grant (power pellet), - empty (ghost house / tunnel)
+  // _ ghost spawn marker (treated as empty)
+  const MAZE_SRC = [
+    "###################",
+    "#........#........#",
+    "#o##.###.#.###.##o#",
+    "#.................#",
+    "#.##.#.#####.#.##.#",
+    "#....#...#...#....#",
+    "####.###.#.###.####",
+    "####.#.......#.####",
+    "####.#.##-##.#.####",
+    "-------#-_-#-------",
+    "####.#.#####.#.####",
+    "####.#.......#.####",
+    "####.#.#####.#.####",
+    "#........#........#",
+    "#.##.###.#.###.##.#",
+    "#o.#...........#.o#",
+    "##.#.#.#####.#.#.##",
+    "#....#...#...#....#",
+    "#.######.#.######.#",
+    "#.................#",
+    "###################",
+  ];
+  const COLS = MAZE_SRC[0].length;
+  const ROWS = MAZE_SRC.length;
+  const TILE = 32;
+  const W = COLS * TILE;
+  const H = ROWS * TILE;
+
+  const canvas = document.getElementById('game');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // Tile types
+  const WALL = 1, DOT = 2, GRANT = 3, EMPTY = 0;
+  let grid = [];
+  let totalPellets = 0;
+
+  function resetGrid() {
+    grid = [];
+    totalPellets = 0;
+    for (let r = 0; r < ROWS; r++) {
+      const row = [];
+      for (let c = 0; c < COLS; c++) {
+        const ch = MAZE_SRC[r][c];
+        if (ch === '#') row.push(WALL);
+        else if (ch === '.') { row.push(DOT); totalPellets++; }
+        else if (ch === 'o') { row.push(GRANT); totalPellets++; }
+        else row.push(EMPTY);
+      }
+      grid.push(row);
+    }
+  }
+
+  // ---------- Hand-drawn helpers ----------
+  // Seeded pseudo-random for stable wobble per frame element
+  function jitter(amount = 1.5) {
+    return (Math.random() - 0.5) * 2 * amount;
+  }
+
+  function sketchLine(x1, y1, x2, y2, passes = 2, wob = 1.2) {
+    for (let i = 0; i < passes; i++) {
+      ctx.beginPath();
+      const steps = 4;
+      ctx.moveTo(x1 + jitter(wob), y1 + jitter(wob));
+      for (let s = 1; s <= steps; s++) {
+        const t = s / steps;
+        const x = x1 + (x2 - x1) * t + jitter(wob);
+        const y = y1 + (y2 - y1) * t + jitter(wob);
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+  }
+
+  function sketchCircle(cx, cy, r, passes = 2, wob = 0.8) {
+    for (let i = 0; i < passes; i++) {
+      ctx.beginPath();
+      const steps = 24;
+      for (let s = 0; s <= steps; s++) {
+        const a = (s / steps) * Math.PI * 2;
+        const rr = r + jitter(wob);
+        const x = cx + Math.cos(a) * rr;
+        const y = cy + Math.sin(a) * rr;
+        if (s === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+  }
+
+  function sketchRect(x, y, w, h, passes = 1, wob = 1.0) {
+    sketchLine(x, y, x + w, y, passes, wob);
+    sketchLine(x + w, y, x + w, y + h, passes, wob);
+    sketchLine(x + w, y + h, x, y + h, passes, wob);
+    sketchLine(x, y + h, x, y, passes, wob);
+  }
+
+  // ---------- Entities ----------
+  function tileAt(c, r) {
+    if (r < 0 || r >= ROWS) return WALL;
+    // Wrap horizontally for tunnels
+    const cc = ((c % COLS) + COLS) % COLS;
+    return grid[r][cc];
+  }
+  function isWall(c, r) { return tileAt(c, r) === WALL; }
+
+  // Position is in pixels; entity moves smoothly. Tile coords derived.
+  const SPEED = 2.2;
+  const GHOST_SPEED = 1.9;
+  const FRIGHTENED_SPEED = 1.2;
+
+  const player = {
+    x: 9 * TILE + TILE / 2,
+    y: 15 * TILE + TILE / 2,
+    dir: { x: 0, y: 0 },
+    nextDir: { x: 0, y: 0 },
+    mouth: 0,
+    alive: true,
+  };
+
+  const GHOST_NAMES = ['Audit', 'Overhead Creep', 'Donor Churn', 'Compliance Risk'];
+  const GHOST_COLORS = ['#6b4e8a', '#2e7d4f', '#b8860b', '#8b3a3a'];
+  const GHOST_HOME = { x: 9 * TILE + TILE / 2, y: 9 * TILE + TILE / 2 };
+
+  function makeGhost(i) {
+    const startSpots = [
+      { x: 9 * TILE + TILE/2, y: 9 * TILE + TILE/2 },
+      { x: 8 * TILE + TILE/2, y: 9 * TILE + TILE/2 },
+      { x: 10 * TILE + TILE/2, y: 9 * TILE + TILE/2 },
+      { x: 9 * TILE + TILE/2, y: 8 * TILE + TILE/2 },
+    ];
+    return {
+      name: GHOST_NAMES[i],
+      color: GHOST_COLORS[i],
+      x: startSpots[i].x,
+      y: startSpots[i].y,
+      dir: { x: 0, y: -1 },
+      frightened: 0, // frames remaining
+      eaten: false,
+      releaseTimer: i * 90,
+    };
+  }
+  let ghosts = [];
+
+  // ---------- Game state ----------
+  let score = 0;
+  let lives = 3;
+  let level = 1;
+  let running = false;
+  let frightenedTotal = 0;
+
+  const TIPS = [
+    "Restricted funds: they have trust issues. Spend them only on what donors specified.",
+    "Overhead isn't evil. Try paying staff with vibes and see how long the program lasts.",
+    "Form 990 is your nonprofit's public dating profile. Make it look good.",
+    "Endowments: like a savings account that judges you for touching it.",
+    "Matching grants double your money. Sadly they do not double your weekends.",
+    "Reconciling the books is just adulting for nonprofits.",
+    "Donor churn is real. Thank them like your funding depends on it. It does.",
+    "An audit isn't an accusation, it's just paperwork wearing a suit.",
+  ];
+
+  function pickTip() {
+    return TIPS[Math.floor(Math.random() * TIPS.length)];
+  }
+
+  // ---------- Input ----------
+  const keys = {};
+  window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    keys[k] = true;
+    if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
+    if (k === 'arrowup' || k === 'w') player.nextDir = { x: 0, y: -1 };
+    if (k === 'arrowdown' || k === 's') player.nextDir = { x: 0, y: 1 };
+    if (k === 'arrowleft' || k === 'a') player.nextDir = { x: -1, y: 0 };
+    if (k === 'arrowright' || k === 'd') player.nextDir = { x: 1, y: 0 };
+  });
+  window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+  // ---------- Movement ----------
+  function atTileCenter(e) {
+    const cx = Math.floor(e.x / TILE) * TILE + TILE / 2;
+    const cy = Math.floor(e.y / TILE) * TILE + TILE / 2;
+    return Math.abs(e.x - cx) < 1.5 && Math.abs(e.y - cy) < 1.5;
+  }
+
+  function canMove(e, dir) {
+    const cx = Math.floor(e.x / TILE);
+    const cy = Math.floor(e.y / TILE);
+    const nc = cx + dir.x;
+    const nr = cy + dir.y;
+    return !isWall(nc, nr);
+  }
+
+  function moveEntity(e, speed) {
+    e.x += e.dir.x * speed;
+    e.y += e.dir.y * speed;
+    // Tunnel wrap
+    if (e.x < -TILE / 2) e.x = W + TILE / 2 - 1;
+    if (e.x > W + TILE / 2) e.x = -TILE / 2 + 1;
+  }
+
+  function updatePlayer() {
+    if (!player.alive) return;
+    if (atTileCenter(player)) {
+      // Snap
+      player.x = Math.floor(player.x / TILE) * TILE + TILE / 2;
+      player.y = Math.floor(player.y / TILE) * TILE + TILE / 2;
+      if ((player.nextDir.x || player.nextDir.y) && canMove(player, player.nextDir)) {
+        player.dir = { ...player.nextDir };
+      }
+      if (!canMove(player, player.dir)) {
+        player.dir = { x: 0, y: 0 };
+      }
+    }
+    moveEntity(player, SPEED);
+    player.mouth = (player.mouth + 0.2) % (Math.PI * 2);
+
+    // Collect
+    const cc = Math.floor(player.x / TILE);
+    const cr = Math.floor(player.y / TILE);
+    const t = tileAt(cc, cr);
+    if (t === DOT) {
+      grid[cr][cc] = EMPTY;
+      score += 10;
+      totalPellets--;
+      updateHud();
+    } else if (t === GRANT) {
+      grid[cr][cc] = EMPTY;
+      score += 50;
+      totalPellets--;
+      frightenedTotal = 360;
+      ghosts.forEach(g => { if (!g.eaten) g.frightened = 360; });
+      updateHud();
+    }
+    if (totalPellets <= 0) levelComplete();
+  }
+
+  // ---------- Ghost AI ----------
+  function chooseGhostDir(g, target) {
+    if (!atTileCenter(g)) return;
+    g.x = Math.floor(g.x / TILE) * TILE + TILE / 2;
+    g.y = Math.floor(g.y / TILE) * TILE + TILE / 2;
+    const cc = Math.floor(g.x / TILE);
+    const cr = Math.floor(g.y / TILE);
+    const opts = [
+      { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 },
+    ].filter(d => {
+      // No reversing
+      if (d.x === -g.dir.x && d.y === -g.dir.y) return false;
+      return !isWall(cc + d.x, cr + d.y);
+    });
+    if (opts.length === 0) {
+      g.dir = { x: -g.dir.x, y: -g.dir.y };
+      return;
+    }
+    // Score by distance to target (or away if frightened)
+    let best = opts[0], bestScore = g.frightened > 0 ? -Infinity : Infinity;
+    for (const d of opts) {
+      const nx = (cc + d.x) * TILE + TILE / 2;
+      const ny = (cr + d.y) * TILE + TILE / 2;
+      const dist = Math.hypot(nx - target.x, ny - target.y);
+      if (g.frightened > 0) {
+        if (dist > bestScore) { bestScore = dist; best = d; }
+      } else {
+        if (dist < bestScore) { bestScore = dist; best = d; }
+      }
+    }
+    g.dir = best;
+  }
+
+  function updateGhosts() {
+    for (const g of ghosts) {
+      if (g.releaseTimer > 0) { g.releaseTimer--; continue; }
+      if (g.eaten) {
+        // Return home
+        const dx = GHOST_HOME.x - g.x, dy = GHOST_HOME.y - g.y;
+        if (Math.hypot(dx, dy) < 4) { g.eaten = false; g.frightened = 0; g.dir = { x: 0, y: -1 }; continue; }
+        chooseGhostDir(g, GHOST_HOME);
+        moveEntity(g, GHOST_SPEED * 1.6);
+        continue;
+      }
+      let target;
+      if (g.frightened > 0) {
+        g.frightened--;
+        // Run away — target = mirror of player
+        target = { x: W - player.x, y: H - player.y };
+      } else {
+        target = { x: player.x + g.dir.x * TILE * 2, y: player.y + g.dir.y * TILE * 2 };
+        if (g.name === 'Audit') target = { x: player.x, y: player.y };
+        if (g.name === 'Donor Churn') target = { x: W - player.x, y: player.y };
+        if (g.name === 'Compliance Risk') {
+          const d = Math.hypot(player.x - g.x, player.y - g.y);
+          target = d > TILE * 5 ? { x: player.x, y: player.y } : { x: 0, y: H };
+        }
+      }
+      chooseGhostDir(g, target);
+      moveEntity(g, g.frightened > 0 ? FRIGHTENED_SPEED : GHOST_SPEED);
+    }
+  }
+
+  function checkCollisions() {
+    if (!player.alive) return;
+    for (const g of ghosts) {
+      if (g.eaten) continue;
+      const d = Math.hypot(g.x - player.x, g.y - player.y);
+      if (d < TILE * 0.7) {
+        if (g.frightened > 0) {
+          g.eaten = true;
+          g.frightened = 0;
+          score += 200;
+          updateHud();
+        } else {
+          loseLife();
+          return;
+        }
+      }
+    }
+  }
+
+  function loseLife() {
+    lives--;
+    updateHud();
+    player.alive = false;
+    setTimeout(() => {
+      if (lives <= 0) {
+        gameOver();
+      } else {
+        resetPositions();
+        player.alive = true;
+      }
+    }, 1000);
+  }
+
+  function resetPositions() {
+    player.x = 9 * TILE + TILE / 2;
+    player.y = 15 * TILE + TILE / 2;
+    player.dir = { x: 0, y: 0 };
+    player.nextDir = { x: 0, y: 0 };
+    ghosts = [0,1,2,3].map(makeGhost);
+  }
+
+  function levelComplete() {
+    running = false;
+    level++;
+    showOverlay("End of Fiscal Year " + (level - 1),
+      "Books balanced. Donors appeased. Moving to FY " + level + ".",
+      pickTip(), "Begin Next Year", () => {
+        resetGrid();
+        resetPositions();
+        running = true;
+      });
+  }
+
+  function gameOver() {
+    running = false;
+    showOverlay("Final Audit",
+      "The threats caught up with your treasurer. Final score: " + score + ".",
+      pickTip(), "Try Again", () => {
+        score = 0; lives = 3; level = 1;
+        updateHud();
+        resetGrid();
+        resetPositions();
+        running = true;
+      });
+  }
+
+  // ---------- Rendering ----------
+  function drawMaze() {
+    ctx.strokeStyle = '#3a3a3a';
+    ctx.lineWidth = 2;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (grid[r][c] === WALL) {
+          const x = c * TILE, y = r * TILE;
+          // Draw walls only on sides facing non-wall (cleaner sketch look)
+          const top = !isWall(c, r - 1);
+          const bot = !isWall(c, r + 1);
+          const lft = !isWall(c - 1, r);
+          const rgt = !isWall(c + 1, r);
+          if (top) sketchLine(x + 2, y + 4, x + TILE - 2, y + 4, 1, 0.6);
+          if (bot) sketchLine(x + 2, y + TILE - 4, x + TILE - 2, y + TILE - 4, 1, 0.6);
+          if (lft) sketchLine(x + 4, y + 2, x + 4, y + TILE - 2, 1, 0.6);
+          if (rgt) sketchLine(x + TILE - 4, y + 2, x + TILE - 4, y + TILE - 2, 1, 0.6);
+        }
+      }
+    }
+  }
+
+  function drawPellets() {
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const t = grid[r][c];
+        const cx = c * TILE + TILE / 2;
+        const cy = r * TILE + TILE / 2;
+        if (t === DOT) {
+          ctx.strokeStyle = '#2b2b2b';
+          ctx.lineWidth = 1.5;
+          sketchCircle(cx, cy, 2.5, 1, 0.3);
+        } else if (t === GRANT) {
+          ctx.strokeStyle = 'var(--grant)';
+          ctx.strokeStyle = '#d4a017';
+          ctx.lineWidth = 2;
+          sketchCircle(cx, cy, 7, 2, 0.6);
+          // Dollar mark inside
+          ctx.lineWidth = 1.5;
+          sketchLine(cx, cy - 5, cx, cy + 5, 1, 0.3);
+          sketchLine(cx - 3, cy - 2, cx + 3, cy - 2, 1, 0.3);
+          sketchLine(cx - 3, cy + 2, cx + 3, cy + 2, 1, 0.3);
+        }
+      }
+    }
+  }
+
+  function drawPlayer() {
+    ctx.strokeStyle = '#c1440e';
+    ctx.lineWidth = 2.5;
+    const r = TILE * 0.42;
+    // Determine mouth angle
+    let baseAngle = 0;
+    if (player.dir.x === 1) baseAngle = 0;
+    else if (player.dir.x === -1) baseAngle = Math.PI;
+    else if (player.dir.y === -1) baseAngle = -Math.PI / 2;
+    else if (player.dir.y === 1) baseAngle = Math.PI / 2;
+    const mouthOpen = (Math.abs(Math.sin(player.mouth)) * 0.5) + 0.05;
+    // Arc with mouth
+    for (let pass = 0; pass < 2; pass++) {
+      ctx.beginPath();
+      const steps = 28;
+      const start = baseAngle + mouthOpen;
+      const end = baseAngle + Math.PI * 2 - mouthOpen;
+      for (let s = 0; s <= steps; s++) {
+        const a = start + (end - start) * (s / steps);
+        const rr = r + jitter(0.6);
+        const x = player.x + Math.cos(a) * rr;
+        const y = player.y + Math.sin(a) * rr;
+        if (s === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      // Close back to center
+      ctx.lineTo(player.x + jitter(0.4), player.y + jitter(0.4));
+      ctx.closePath();
+      ctx.stroke();
+    }
+    // Small "$" inside
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = '#c1440e';
+    sketchLine(player.x - 3, player.y - 5, player.x - 3, player.y + 5, 1, 0.3);
+  }
+
+  function drawGhost(g) {
+    const r = TILE * 0.4;
+    const baseY = g.y + r;
+    let color = g.color;
+    if (g.eaten) color = '#999';
+    else if (g.frightened > 0) {
+      color = g.frightened < 90 && Math.floor(g.frightened / 10) % 2 === 0 ? '#888' : '#4a6fa5';
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.2;
+    // Dome
+    for (let pass = 0; pass < 2; pass++) {
+      ctx.beginPath();
+      const steps = 18;
+      for (let s = 0; s <= steps; s++) {
+        const a = Math.PI + (s / steps) * Math.PI;
+        const rr = r + jitter(0.5);
+        const x = g.x + Math.cos(a) * rr;
+        const y = g.y + Math.sin(a) * rr;
+        if (s === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      // Wavy bottom
+      const waves = 4;
+      const waveW = (r * 2) / waves;
+      for (let i = 0; i < waves; i++) {
+        const x1 = g.x + r - i * waveW;
+        const yMid = baseY - 3 + jitter(0.4);
+        ctx.lineTo(x1 - waveW / 2, yMid);
+        ctx.lineTo(x1 - waveW, baseY + jitter(0.4));
+      }
+      ctx.stroke();
+    }
+    // Eyes
+    if (!g.eaten) {
+      ctx.lineWidth = 1.3;
+      ctx.strokeStyle = '#2b2b2b';
+      sketchCircle(g.x - r * 0.35, g.y - r * 0.15, 3.5, 1, 0.3);
+      sketchCircle(g.x + r * 0.35, g.y - r * 0.15, 3.5, 1, 0.3);
+      // Pupils — small dots
+      ctx.beginPath();
+      ctx.arc(g.x - r * 0.35 + g.dir.x * 1.5, g.y - r * 0.15 + g.dir.y * 1.5, 1.2, 0, Math.PI * 2);
+      ctx.arc(g.x + r * 0.35 + g.dir.x * 1.5, g.y - r * 0.15 + g.dir.y * 1.5, 1.2, 0, Math.PI * 2);
+      ctx.fillStyle = '#2b2b2b';
+      ctx.fill();
+    } else {
+      // Just eyes
+      ctx.lineWidth = 1.3;
+      ctx.strokeStyle = '#666';
+      sketchLine(g.x - 5, g.y - 2, g.x - 2, g.y + 1, 1, 0.3);
+      sketchLine(g.x - 2, g.y - 2, g.x - 5, g.y + 1, 1, 0.3);
+      sketchLine(g.x + 2, g.y - 2, g.x + 5, g.y + 1, 1, 0.3);
+      sketchLine(g.x + 5, g.y - 2, g.x + 2, g.y + 1, 1, 0.3);
+    }
+    // Tiny name label below
+    if (!g.eaten && g.frightened === 0) {
+      ctx.fillStyle = 'rgba(43,43,43,0.45)';
+      ctx.font = 'italic 9px Georgia';
+      ctx.textAlign = 'center';
+      ctx.fillText(g.name, g.x, g.y + r + 12);
+    }
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+    drawMaze();
+    drawPellets();
+    if (player.alive) drawPlayer();
+    ghosts.forEach(drawGhost);
+  }
+
+  // ---------- HUD / Overlay ----------
+  function updateHud() {
+    document.getElementById('score').textContent = score;
+    document.getElementById('lives').textContent = lives;
+    document.getElementById('level').textContent = level;
+  }
+
+  const overlay = document.getElementById('overlay');
+  const oTitle = document.getElementById('overlay-title');
+  const oBody = document.getElementById('overlay-body');
+  const oTip = document.getElementById('overlay-tip');
+  const oBtn = document.getElementById('overlay-btn');
+  let overlayCb = null;
+
+  function showOverlay(title, body, tip, btn, cb) {
+    oTitle.textContent = title;
+    oBody.textContent = body;
+    oTip.textContent = "Tip: " + tip;
+    oBtn.textContent = btn;
+    overlayCb = cb;
+    overlay.classList.remove('hidden');
+  }
+  function hideOverlay() { overlay.classList.add('hidden'); }
+
+  oBtn.addEventListener('click', () => {
+    hideOverlay();
+    if (overlayCb) overlayCb();
+  });
+
+  // ---------- Main loop ----------
+  let lastTime = 0;
+  function loop(t) {
+    requestAnimationFrame(loop);
+    if (!running) { render(); return; }
+    updatePlayer();
+    updateGhosts();
+    checkCollisions();
+    render();
+  }
+
+  // ---------- Init ----------
+  resetGrid();
+  resetPositions();
+  updateHud();
+  showOverlay("Ledger Muncher",
+    "Guide your nonprofit's treasurer through the budget maze. Collect donations, grab matching grants, and avoid Audit, Overhead Creep, Donor Churn, and Compliance Risk.",
+    pickTip(), "Start Fiscal Year",
+    () => { running = true; });
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
