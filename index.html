@@ -122,6 +122,17 @@
   }
   .legend span { display: inline-flex; align-items: center; gap: 4px; }
   .swatch { width: 12px; height: 12px; border: 1.5px solid var(--ink); display: inline-block; border-radius: 50%; }
+  .credit {
+    font-size: 12px;
+    font-style: italic;
+    opacity: 0.65;
+    margin-top: 6px;
+    letter-spacing: 0.5px;
+  }
+  .overlay-credit {
+    margin-top: 24px;
+    opacity: 0.55;
+  }
 </style>
 </head>
 <body>
@@ -142,6 +153,7 @@
     <span><span class="swatch" style="background:#3a7d44"></span> Bonus Form</span>
   </div>
   <div class="controls">Arrow keys / WASD on desktop. Swipe on mobile. Eat a grant to absorb threats.</div>
+  <div class="credit">Built by Woolichooks ✧ Claude Code</div>
 </div>
 
 <div id="overlay">
@@ -149,6 +161,7 @@
   <p id="overlay-body">Guide your nonprofit's treasurer through the budget maze. Collect donations, grab matching grants, and avoid Audit, Overhead Creep, Donor Churn, and Compliance Risk.</p>
   <div class="tip" id="overlay-tip">Tip: Grants briefly turn threats into reconcilable line items. Munch them for bonus revenue.</div>
   <button id="overlay-btn">Start Fiscal Year</button>
+  <div class="credit overlay-credit">Built by Woolichooks ✧ Claude Code</div>
 </div>
 
 <script>
