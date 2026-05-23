@@ -25,13 +25,90 @@ export const INITIAL_RESOURCES: Record<Resource, number> = {
 
 export const TIME_LIMIT_MS = 90_000;
 export const WRONG_PENALTY_MS = 10_000;
+export const HINT_FUEL_COST = 1;
 
-export const computeReward = (elapsedMs: number, limitMs = TIME_LIMIT_MS): number => {
+export type Tier = 1 | 2 | 3 | 4;
+
+export type TierConfig = {
+  tier: Tier;
+  label: string;
+  flavor: string;
+  minEntries: number;
+  maxEntries: number;
+  monthsTotal: 12 | 24;
+  decoys: number;
+  timeLimitMs: number;
+  hintsAllowed: number;
+  rewardBonus: number;
+};
+
+export const TIER_CONFIGS: Record<Tier, TierConfig> = {
+  1: {
+    tier: 1,
+    label: 'Sunrise reconciliation',
+    flavor: 'Short ledger. Clean entries. Warm up the fingers.',
+    minEntries: 4,
+    maxEntries: 7,
+    monthsTotal: 12,
+    decoys: 0,
+    timeLimitMs: 90_000,
+    hintsAllowed: 0,
+    rewardBonus: 0,
+  },
+  2: {
+    tier: 2,
+    label: 'Morning ledger',
+    flavor: 'Longer schedule. A suspicious-looking row or two — not all that glitters is wrong.',
+    minEntries: 8,
+    maxEntries: 12,
+    monthsTotal: 12,
+    decoys: 1,
+    timeLimitMs: 100_000,
+    hintsAllowed: 1,
+    rewardBonus: 0,
+  },
+  3: {
+    tier: 3,
+    label: 'Afternoon audit',
+    flavor: 'A 24-month roll-forward. More rows, more red herrings, more time.',
+    minEntries: 12,
+    maxEntries: 18,
+    monthsTotal: 24,
+    decoys: 2,
+    timeLimitMs: 120_000,
+    hintsAllowed: 2,
+    rewardBonus: 1,
+  },
+  4: {
+    tier: 4,
+    label: 'Dusk close',
+    flavor: 'The books get unfriendly after dark. Hint costs are worth it now.',
+    minEntries: 16,
+    maxEntries: 22,
+    monthsTotal: 24,
+    decoys: 3,
+    timeLimitMs: 140_000,
+    hintsAllowed: 2,
+    rewardBonus: 2,
+  },
+};
+
+export const tierForDay = (day: number): Tier => {
+  if (day <= 3) return 1;
+  if (day <= 7) return 2;
+  if (day <= 12) return 3;
+  return 4;
+};
+
+export const computeReward = (
+  elapsedMs: number,
+  limitMs: number,
+  bonus = 0,
+): number => {
   if (elapsedMs >= limitMs) return 0;
   const fraction = elapsedMs / limitMs;
-  if (fraction <= 1 / 3) return 3;
-  if (fraction <= 2 / 3) return 2;
-  return 1;
+  const base = fraction <= 1 / 3 ? 3 : fraction <= 2 / 3 ? 2 : 1;
+  return base + bonus;
 };
 
 export const dailyDecay = (

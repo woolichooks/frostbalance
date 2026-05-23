@@ -16,6 +16,7 @@ export type Transaction = {
   account: Account;
   contraAccount: Account;
   amount: number;
+  decoy?: boolean;
 };
 
 export type Discrepancy = 0.01 | 0.02 | 0.11 | 0.2 | 1.5;
@@ -33,10 +34,14 @@ export type Scenario = {
   annualAmount: number;
   startMonth: number;
   monthsElapsed: number;
+  monthsTotal: number;
 };
 
 export type Puzzle = {
   id: string;
+  tier: 1 | 2 | 3 | 4;
+  timeLimitMs: number;
+  hintsAllowed: number;
   scenario: Scenario;
   openingEntry: Transaction;
   amortizationEntries: Transaction[];

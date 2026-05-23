@@ -2,16 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { generatePuzzle } from './engine/generator';
 import type { Puzzle } from './engine/types';
 import { fmt, signedFmt } from './engine/format';
-import type { Resource } from './engine/survival';
+import type { Resource, Tier } from './engine/survival';
 import {
+  HINT_FUEL_COST,
   INITIAL_RESOURCES,
   RESOURCE_LABEL,
-  TIME_LIMIT_MS,
+  TIER_CONFIGS,
   WRONG_PENALTY_MS,
   computeReward,
   dailyDecay,
   grantReward,
   isStarved,
+  tierForDay,
 } from './engine/survival';
 import { ResourcePanel } from './components/ResourcePanel';
 import { Timer } from './components/Timer';
@@ -25,12 +27,14 @@ function App() {
   const [resources, setResources] = useState(INITIAL_RESOURCES);
   const [phase, setPhase] = useState<Phase>('briefing');
   const [chosenResource, setChosenResource] = useState<Resource | null>(null);
-  const [puzzle, setPuzzle] = useState<Puzzle>(() => generatePuzzle());
+  const [puzzle, setPuzzle] = useState<Puzzle>(() => generatePuzzle(1));
 
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [selectedFixId, setSelectedFixId] = useState<string | null>(null);
   const [wrongFlash, setWrongFlash] = useState(false);
   const [wrongAttempts, setWrongAttempts] = useState(0);
+  const [ruledOut, setRuledOut] = useState<Set<string>>(new Set());
+  const [hintsUsed, setHintsUsed] = useState(0);
 
   const [timerStart, setTimerStart] = useState<number | null>(null);
   const [timerFrozenAt, setTimerFrozenAt] = useState<number | null>(null);
@@ -55,32 +59,60 @@ function App() {
     return ref - timerStart + penaltyMs;
   }, [timerStart, timerFrozenAt, penaltyMs]);
 
+  const currentTier: Tier = tierForDay(day);
+  const tierConfig = TIER_CONFIGS[currentTier];
+
   // Timeout detection
   useEffect(() => {
-    if (phase === 'playing' && elapsedMs >= TIME_LIMIT_MS) {
+    if (phase === 'playing' && elapsedMs >= puzzle.timeLimitMs) {
       setTimerFrozenAt(Date.now());
-      setLastSolveMs(TIME_LIMIT_MS);
+      setLastSolveMs(puzzle.timeLimitMs);
       setLastReward(0);
       setPhase('timeout');
     }
-  }, [phase, elapsedMs]);
+  }, [phase, elapsedMs, puzzle.timeLimitMs]);
 
   const beginDay = useCallback(() => {
     if (!chosenResource) return;
-    setPuzzle(generatePuzzle());
+    setPuzzle(generatePuzzle(currentTier));
     setSelectedRowId(null);
     setSelectedFixId(null);
     setWrongAttempts(0);
+    setRuledOut(new Set());
+    setHintsUsed(0);
     setPenaltyMs(0);
     setTimerFrozenAt(null);
     setTimerStart(Date.now());
     setPhase('playing');
-  }, [chosenResource]);
+  }, [chosenResource, currentTier]);
 
   const onPickRow = (id: string) => {
     if (phase !== 'playing') return;
+    if (ruledOut.has(id)) return;
     setSelectedRowId(id);
     setSelectedFixId(null);
+  };
+
+  const onUseHint = () => {
+    if (phase !== 'playing') return;
+    if (hintsUsed >= puzzle.hintsAllowed) return;
+    if (resources.fuel < HINT_FUEL_COST) return;
+    const candidates = puzzle.amortizationEntries
+      .map((t) => t.id)
+      .filter((id) => id !== puzzle.errorTransactionId && !ruledOut.has(id));
+    if (candidates.length === 0) return;
+    const target = candidates[Math.floor(Math.random() * candidates.length)];
+    setRuledOut((prev) => {
+      const next = new Set(prev);
+      next.add(target);
+      return next;
+    });
+    setHintsUsed((n) => n + 1);
+    setResources((r) => ({ ...r, fuel: r.fuel - HINT_FUEL_COST }));
+    if (selectedRowId === target) {
+      setSelectedRowId(null);
+      setSelectedFixId(null);
+    }
   };
 
   const onSubmit = () => {
@@ -93,7 +125,7 @@ function App() {
       setTimerFrozenAt(frozen);
       const elapsed = frozen - (timerStart ?? frozen) + penaltyMs;
       setLastSolveMs(elapsed);
-      setLastReward(computeReward(elapsed));
+      setLastReward(computeReward(elapsed, puzzle.timeLimitMs, tierConfig.rewardBonus));
       setPhase('solved');
     } else {
       setWrongAttempts((n) => n + 1);
@@ -145,9 +177,9 @@ function App() {
       <header className="app-header">
         <h1>Frostbalance</h1>
         <p className="tagline">
-          Day {day} · The trial balance is the only thing standing between you
-          and frostbite.
+          Day {day} · Tier {currentTier} — {tierConfig.label}
         </p>
+        <p className="flavor">{tierConfig.flavor}</p>
       </header>
 
       <ResourcePanel resources={resources} highlight={chosenResource} />
@@ -167,13 +199,18 @@ function App() {
           <section className="card scenario">
             <div className="scenario-header">
               <h2>Today's reconciliation</h2>
-              <Timer elapsedMs={elapsedMs} flashing={wrongFlash} />
+              <Timer
+                elapsedMs={elapsedMs}
+                limitMs={puzzle.timeLimitMs}
+                flashing={wrongFlash}
+              />
             </div>
             <p>
               You paid <strong>{puzzle.scenario.vendor}</strong>{' '}
-              {fmt(puzzle.scenario.annualAmount)} for a 12-month{' '}
-              {puzzle.scenario.itemNoun} on {puzzle.openingEntry.date}. It's{' '}
-              now {puzzle.scenario.monthsElapsed} months in. Trial balance:{' '}
+              {fmt(puzzle.scenario.annualAmount)} for a{' '}
+              {puzzle.scenario.monthsTotal}-month {puzzle.scenario.itemNoun} on{' '}
+              {puzzle.openingEntry.date}. It's now{' '}
+              {puzzle.scenario.monthsElapsed} months in. Trial balance:{' '}
               <strong>{fmt(puzzle.trialBalance)}</strong>. Schedule total:{' '}
               <strong>{fmt(puzzle.scheduleBalance)}</strong>. Discrepancy:{' '}
               <strong>{signedFmt(puzzle.discrepancy)}</strong>.
@@ -188,6 +225,29 @@ function App() {
                 </span>
               )}
             </p>
+            {phase === 'playing' && puzzle.hintsAllowed > 0 && (
+              <div className="hint-bar">
+                <button
+                  type="button"
+                  onClick={onUseHint}
+                  disabled={
+                    hintsUsed >= puzzle.hintsAllowed ||
+                    resources.fuel < HINT_FUEL_COST
+                  }
+                  title={
+                    resources.fuel < HINT_FUEL_COST
+                      ? 'Not enough fuel'
+                      : 'Rule out a row that reconciles cleanly'
+                  }
+                >
+                  Burn a log for a hint ({hintsUsed}/{puzzle.hintsAllowed} used · costs{' '}
+                  {HINT_FUEL_COST} fuel)
+                </button>
+                <span className="hint-explainer">
+                  Marks one clean row as ruled out.
+                </span>
+              </div>
+            )}
           </section>
 
           <div className="two-col">
@@ -234,21 +294,27 @@ function App() {
                   {scheduleRows.map((t, i) => {
                     const isOpening = i === 0;
                     const isSelected = selectedRowId === t.id;
+                    const isRuledOut = ruledOut.has(t.id);
                     const reveal = phase === 'solved' || phase === 'timeout';
                     const showCorrect = reveal && t.id === puzzle.errorTransactionId;
+                    const clickable = !isOpening && phase === 'playing' && !isRuledOut;
                     return (
                       <tr
                         key={t.id}
                         className={[
-                          isOpening ? 'opening' : phase === 'playing' ? 'clickable' : '',
+                          isOpening ? 'opening' : clickable ? 'clickable' : '',
                           isSelected ? 'selected' : '',
                           showCorrect ? 'flag-correct' : '',
+                          isRuledOut ? 'ruled-out' : '',
                         ].join(' ')}
-                        onClick={() => !isOpening && onPickRow(t.id)}
+                        onClick={() => clickable && onPickRow(t.id)}
                       >
                         <td>{isOpening ? '—' : i}</td>
                         <td>{t.date}</td>
-                        <td>{t.description}</td>
+                        <td>
+                          {t.description}
+                          {isRuledOut && <span className="ruled-tag"> ✓ clean</span>}
+                        </td>
                         <td className="num">
                           {isOpening ? fmt(t.amount) : `(${fmt(t.amount)})`}
                         </td>

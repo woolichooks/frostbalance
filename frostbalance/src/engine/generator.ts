@@ -1,4 +1,5 @@
 import { monthEndLabel, monthStartLabel, round2 } from './format';
+import { TIER_CONFIGS, type Tier } from './survival';
 import type {
   Account,
   Discrepancy,
@@ -47,41 +48,27 @@ const TEMPLATES: ScenarioTemplate[] = [
   },
 ];
 
+const DECOY_DESCRIPTIONS = [
+  'Reclassification per audit memo',
+  'Mid-period true-up',
+  'Adjusting entry — vendor invoice correction',
+  'Catch-up entry from prior month',
+  'Reversed & re-posted (manual JE)',
+  'Quarter-end adjustment',
+  'Reallocated from suspense account',
+  'CFO override — see workpaper',
+];
+
 const DISCREPANCIES: Discrepancy[] = [0.01, 0.02, 0.11, 0.2, 1.5];
 
 const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+const randBetween = (min: number, max: number): number =>
+  min + Math.floor(Math.random() * (max - min + 1));
+
 const uid = (() => {
   let n = 0;
   return () => `t${++n}`;
 })();
-
-const buildFixes = (
-  errorTxnId: string,
-  correctAmount: number,
-  observedAmount: number,
-  expenseAccount: Account,
-): { fixes: FixOption[]; correctFixId: string } => {
-  const correctId = `fix-${errorTxnId}-correct`;
-  const correctLabel = `Correct the amount on the flagged row to ${currency(correctAmount)}`;
-
-  const decoyAdjustAmount = round2(observedAmount - correctAmount + (pick([0.01, -0.01, 0.1, -0.1]) as number));
-  const decoy1: FixOption = {
-    id: `fix-${errorTxnId}-adj`,
-    label: `Post an adjusting entry for ${signed(decoyAdjustAmount)} against ${expenseAccount}`,
-  };
-  const decoy2: FixOption = {
-    id: `fix-${errorTxnId}-reverse`,
-    label: `Reverse the flagged row in full`,
-  };
-  const decoy3: FixOption = {
-    id: `fix-${errorTxnId}-noop`,
-    label: `Leave as-is — rounding is immaterial`,
-  };
-
-  const correctFix: FixOption = { id: correctId, label: correctLabel };
-  const fixes = shuffle([correctFix, decoy1, decoy2, decoy3]);
-  return { fixes, correctFixId: correctId };
-};
 
 const shuffle = <T,>(arr: T[]): T[] => {
   const out = [...arr];
@@ -100,13 +87,49 @@ const signed = (n: number): string =>
 
 const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
-export const generatePuzzle = (): Puzzle => {
+const buildFixes = (
+  errorTxnId: string,
+  correctAmount: number,
+  observedAmount: number,
+  expenseAccount: Account,
+): { fixes: FixOption[]; correctFixId: string } => {
+  const correctId = `fix-${errorTxnId}-correct`;
+  const correctLabel = `Correct the amount on the flagged row to ${currency(correctAmount)}`;
+  const decoyAdjustAmount = round2(
+    observedAmount - correctAmount + (pick([0.01, -0.01, 0.1, -0.1]) as number),
+  );
+  const decoy1: FixOption = {
+    id: `fix-${errorTxnId}-adj`,
+    label: `Post an adjusting entry for ${signed(decoyAdjustAmount)} against ${expenseAccount}`,
+  };
+  const decoy2: FixOption = {
+    id: `fix-${errorTxnId}-reverse`,
+    label: `Reverse the flagged row in full`,
+  };
+  const decoy3: FixOption = {
+    id: `fix-${errorTxnId}-noop`,
+    label: `Leave as-is — rounding is immaterial`,
+  };
+  const correctFix: FixOption = { id: correctId, label: correctLabel };
+  const fixes = shuffle([correctFix, decoy1, decoy2, decoy3]);
+  return { fixes, correctFixId: correctId };
+};
+
+export const generatePuzzle = (tier: Tier = 1): Puzzle => {
+  const cfg = TIER_CONFIGS[tier];
   const template = pick(TEMPLATES);
   const vendor = pick(template.vendors);
-  const annual = pick(template.annualAmounts);
-  const startMonth = Math.floor(Math.random() * 4); // Jan-Apr
-  const monthsElapsed = 4 + Math.floor(Math.random() * 6); // 4-9 months elapsed
-  const monthly = round2(annual / 12);
+  // Annual amounts produce clean monthlies for both 12 and 24 month contracts
+  const annualPool =
+    cfg.monthsTotal === 24
+      ? template.annualAmounts.map((a) => a * 2)
+      : template.annualAmounts;
+  const annual = pick(annualPool);
+  const startMonth = randBetween(0, 3);
+  const maxElapsed = Math.min(cfg.maxEntries, cfg.monthsTotal - 1);
+  const minElapsed = Math.min(cfg.minEntries, maxElapsed);
+  const monthsElapsed = randBetween(minElapsed, maxElapsed);
+  const monthly = round2(annual / cfg.monthsTotal);
 
   const scenario: Scenario = {
     prepaidAccount: template.prepaidAccount,
@@ -116,12 +139,13 @@ export const generatePuzzle = (): Puzzle => {
     annualAmount: annual,
     startMonth,
     monthsElapsed,
+    monthsTotal: cfg.monthsTotal,
   };
 
   const openingEntry: Transaction = {
     id: uid(),
     date: monthStartLabel(startMonth),
-    description: `Prepaid 12-mo ${template.itemNoun} — ${vendor}`,
+    description: `Prepaid ${cfg.monthsTotal}-mo ${template.itemNoun} — ${vendor}`,
     account: template.prepaidAccount,
     contraAccount: 'Cash',
     amount: annual,
@@ -132,7 +156,7 @@ export const generatePuzzle = (): Puzzle => {
     amortizationEntries.push({
       id: uid(),
       date: monthEndLabel(startMonth + i),
-      description: `Amortize ${capitalize(template.itemNoun)} — month ${i + 1} of 12`,
+      description: `Amortize ${capitalize(template.itemNoun)} — month ${i + 1} of ${cfg.monthsTotal}`,
       account: template.expenseAccount,
       contraAccount: template.prepaidAccount,
       amount: monthly,
@@ -144,13 +168,30 @@ export const generatePuzzle = (): Puzzle => {
   const direction = Math.random() < 0.5 ? 1 : -1;
   const errorIdx = Math.floor(Math.random() * amortizationEntries.length);
   const correctAmount = amortizationEntries[errorIdx].amount;
-  // If direction = +1, observed amortization is too high → less prepaid remaining → schedule < TB by `discrepancy`
-  // If direction = -1, observed amortization is too low → more prepaid remaining → schedule > TB by `discrepancy`
   const observedAmount = round2(correctAmount + direction * discrepancy);
   amortizationEntries[errorIdx] = {
     ...amortizationEntries[errorIdx],
     amount: observedAmount,
   };
+  const errorTransactionId = amortizationEntries[errorIdx].id;
+
+  // Sprinkle decoy descriptions on non-error rows
+  const decoyCount = Math.min(
+    cfg.decoys,
+    Math.max(0, amortizationEntries.length - 1),
+  );
+  const decoyCandidates = amortizationEntries
+    .map((_, idx) => idx)
+    .filter((idx) => amortizationEntries[idx].id !== errorTransactionId);
+  const decoyTargets = shuffle(decoyCandidates).slice(0, decoyCount);
+  const decoyPool = shuffle(DECOY_DESCRIPTIONS);
+  decoyTargets.forEach((idx, i) => {
+    amortizationEntries[idx] = {
+      ...amortizationEntries[idx],
+      description: decoyPool[i % decoyPool.length],
+      decoy: true,
+    };
+  });
 
   const totalAmortized = amortizationEntries.reduce((s, t) => s + t.amount, 0);
   const scheduleBalance = round2(annual - totalAmortized);
@@ -158,7 +199,7 @@ export const generatePuzzle = (): Puzzle => {
   const signedDiscrepancy = round2(scheduleBalance - trialBalance);
 
   const { fixes, correctFixId } = buildFixes(
-    amortizationEntries[errorIdx].id,
+    errorTransactionId,
     correctAmount,
     observedAmount,
     template.expenseAccount,
@@ -166,13 +207,16 @@ export const generatePuzzle = (): Puzzle => {
 
   return {
     id: `puzzle-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    tier,
+    timeLimitMs: cfg.timeLimitMs,
+    hintsAllowed: cfg.hintsAllowed,
     scenario,
     openingEntry,
     amortizationEntries,
     trialBalance,
     scheduleBalance,
     discrepancy: signedDiscrepancy,
-    errorTransactionId: amortizationEntries[errorIdx].id,
+    errorTransactionId,
     correctAmount,
     fixes,
     correctFixId,

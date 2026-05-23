@@ -453,3 +453,48 @@ button.primary {
   color: var(--warn);
 }
 
+/* Tier flavor */
+.flavor {
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 2px 0 0;
+}
+
+/* Hint bar */
+.hint-bar {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hint-bar button {
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
+.hint-explainer {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+/* Ruled-out rows */
+tr.ruled-out td {
+  color: #8a8270;
+  text-decoration: line-through;
+  background: rgba(216, 233, 206, 0.4);
+  cursor: not-allowed;
+}
+
+.ruled-tag {
+  margin-left: 8px;
+  font-size: 11px;
+  text-decoration: none;
+  color: var(--ok);
+  font-style: italic;
+  font-weight: bold;
+}
+
