@@ -33,7 +33,7 @@ export function AudioControls() {
   // Apply initial state on mount
   useState(() => {
     setSfxVolume(volume);
-    setMusicVolume(volume * 0.7);
+    setMusicVolume(volume * 0.3);
     setSfxMuted(muted);
     setMusicMuted(muted);
   });
@@ -41,7 +41,7 @@ export function AudioControls() {
   const updateVolume = (v: number) => {
     setVolumeState(v);
     setSfxVolume(v);
-    setMusicVolume(v * 0.7);
+    setMusicVolume(v * 0.3);
     save({ volume: v, muted });
   };
 

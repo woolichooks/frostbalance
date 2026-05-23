@@ -31,7 +31,7 @@ import {
   playTimeoutHorn,
   playWrongThunk,
 } from './audio/sfx';
-import { setMusicState } from './audio/music';
+import { setMusicDucked, setMusicState } from './audio/music';
 import './App.css';
 
 type Phase = 'briefing' | 'playing' | 'solved' | 'timeout' | 'game-over';
@@ -88,15 +88,18 @@ function App() {
     else if (phase === 'game-over') setMusicState('gameover');
   }, [phase]);
 
-  // Final-10s tick
+  // Final-10s tick + duck the music for the final stretch
   const lastTickSecond = useRef<number>(-1);
   useEffect(() => {
     if (phase !== 'playing') {
       lastTickSecond.current = -1;
+      setMusicDucked(false);
       return;
     }
     const remaining = puzzle.timeLimitMs - elapsedMs;
-    if (remaining <= 0 || remaining > 10_000) {
+    const inFinalStretch = remaining > 0 && remaining <= 10_000;
+    setMusicDucked(inFinalStretch);
+    if (!inFinalStretch) {
       lastTickSecond.current = -1;
       return;
     }

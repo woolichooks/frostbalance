@@ -4,14 +4,22 @@ let el: HTMLAudioElement | null = null;
 let currentState: MusicState | null = null;
 let volume = 0.25;
 let muted = false;
+let ducked = false;
 let fadeId: number | null = null;
+
+const DUCK_FACTOR = 0.35;
+
+const effectiveVolume = (): number => {
+  if (muted) return 0;
+  return ducked ? volume * DUCK_FACTOR : volume;
+};
 
 const ensureEl = (): HTMLAudioElement | null => {
   if (typeof window === 'undefined') return null;
   if (!el) {
     el = new Audio();
     el.loop = true;
-    el.volume = muted ? 0 : volume;
+    el.volume = effectiveVolume();
     el.preload = 'auto';
   }
   return el;
@@ -59,7 +67,7 @@ export const setMusicState = (state: MusicState): void => {
   fade(0, 250, () => {
     node.src = url;
     node.play().then(() => {
-      fade(muted ? 0 : volume, 600);
+      fade(effectiveVolume(), 600);
     }).catch(() => {
       // Autoplay still blocked — will retry on next state change after a gesture.
     });
@@ -69,11 +77,17 @@ export const setMusicState = (state: MusicState): void => {
 export const setMusicVolume = (v: number): void => {
   volume = Math.max(0, Math.min(1, v));
   const node = ensureEl();
-  if (node) node.volume = muted ? 0 : volume;
+  if (node) node.volume = effectiveVolume();
 };
 
 export const setMusicMuted = (m: boolean): void => {
   muted = m;
   const node = ensureEl();
-  if (node) node.volume = muted ? 0 : volume;
+  if (node) node.volume = effectiveVolume();
+};
+
+export const setMusicDucked = (d: boolean): void => {
+  if (d === ducked) return;
+  ducked = d;
+  fade(effectiveVolume(), 400);
 };
