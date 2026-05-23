@@ -41,7 +41,7 @@ function App() {
   const [timerStart, setTimerStart] = useState<number | null>(null);
   const [timerFrozenAt, setTimerFrozenAt] = useState<number | null>(null);
   const [penaltyMs, setPenaltyMs] = useState(0);
-  const [, setNowTick] = useState(0);
+  const [nowTick, setNowTick] = useState(0);
 
   const [lastReward, setLastReward] = useState(0);
   const [lastSolveMs, setLastSolveMs] = useState(0);
@@ -55,11 +55,14 @@ function App() {
     return () => window.clearInterval(id);
   }, [phase]);
 
+  // nowTick is bumped every 100ms while playing; including it in deps
+  // forces this memo to recompute against a fresh Date.now() each tick.
   const elapsedMs = useMemo(() => {
     if (timerStart === null) return 0;
     const ref = timerFrozenAt ?? Date.now();
     return ref - timerStart + penaltyMs;
-  }, [timerStart, timerFrozenAt, penaltyMs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timerStart, timerFrozenAt, penaltyMs, nowTick]);
 
   const currentTier: Tier = tierForDay(day);
   const tierConfig = TIER_CONFIGS[currentTier];
