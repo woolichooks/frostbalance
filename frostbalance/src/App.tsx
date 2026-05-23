@@ -190,6 +190,14 @@ function App() {
 
   return (
     <div className="app">
+      <svg className="svg-defs" aria-hidden="true">
+        <defs>
+          <filter id="text-chip" x="-2%" y="-2%" width="104%" height="104%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" seed="7" />
+            <feDisplacementMap in="SourceGraphic" scale="1.6" />
+          </filter>
+        </defs>
+      </svg>
       <FrostOverlay fraction={frostFraction} />
       <div className={`penny-stage penny-stage-${pennyPose}`} aria-hidden="true">
         <Penny pose={pennyPose} />

@@ -4,15 +4,19 @@ type Props = {
   pose: PennyPose;
 };
 
-const SKIN = '#f0d0a5';
-const INK = '#3a2418';
-const SWEATER = '#8a5a3a';
-const SCARF = '#c93838';
-const SCARF_DARK = '#8a1818';
-const BEANIE = '#3a6f8a';
-const POM = '#f4ecd8';
-const FROST = '#b8d4e3';
-const STAR = '#e0b020';
+const INK = '#0a1015';
+const PARKA = '#e3eff4';
+const PARKA_SHADOW = '#a8c4d2';
+const HOOD = '#8ec5d6';
+const HOOD_DARK = '#3a6478';
+const FUR = '#f0f6f9';
+const MITTEN = '#0e2a3e';
+const SKIN = '#d8b890';
+const SKIN_SHADOW = '#a8865c';
+const GOGGLE = '#c5dde6';
+const GOGGLE_HIGHLIGHT = '#f0f6f9';
+const RUST = '#c25a3b';
+const RUST_DARK = '#8a3c25';
 
 export function Penny({ pose }: Props) {
   return (
@@ -20,184 +24,307 @@ export function Penny({ pose }: Props) {
       viewBox="0 0 220 280"
       className={`penny penny-${pose}`}
       xmlns="http://www.w3.org/2000/svg"
-      aria-label={`Penny the accountant — ${pose}`}
+      aria-label={`Penny the auditor — ${pose}`}
     >
       <defs>
-        <filter id="penny-wobble" x="-5%" y="-5%" width="110%" height="110%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="3" />
-          <feDisplacementMap in="SourceGraphic" scale="1.4" />
+        <pattern id="penny-halftone" x="0" y="0" width="4" height="4" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.7" fill={INK} opacity="0.35" />
+        </pattern>
+        <filter id="penny-rough" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4" />
+          <feDisplacementMap in="SourceGraphic" scale="0.8" />
         </filter>
       </defs>
 
-      <g filter="url(#penny-wobble)" strokeLinecap="round" strokeLinejoin="round">
-        {/* Body */}
-        <ellipse cx="110" cy="200" rx="72" ry="58" fill={SWEATER} stroke={INK} strokeWidth="2.5" />
-        {/* Body knit lines */}
-        <path d="M60 195 Q110 205 160 195" fill="none" stroke={INK} strokeOpacity="0.25" strokeWidth="1.5" />
-        <path d="M60 215 Q110 225 160 215" fill="none" stroke={INK} strokeOpacity="0.25" strokeWidth="1.5" />
-        <path d="M62 235 Q110 245 158 235" fill="none" stroke={INK} strokeOpacity="0.25" strokeWidth="1.5" />
-
-        {/* Scarf base */}
+      <g strokeLinecap="round" strokeLinejoin="round" filter="url(#penny-rough)">
+        {/* Parka body — trapezoid */}
         <path
-          d="M50 138 Q110 122 170 138 Q172 158 168 168 Q110 156 52 168 Q48 158 50 138 Z"
-          fill={SCARF}
+          d="M48 170 L40 262 L180 262 L172 170 Z"
+          fill={PARKA}
+          stroke={INK}
+          strokeWidth="3"
+        />
+        {/* Parka shadow / weight at the bottom */}
+        <path
+          d="M48 240 L40 262 L180 262 L172 240 Z"
+          fill={PARKA_SHADOW}
+          opacity="0.6"
+        />
+        {/* Halftone shading on parka */}
+        <path
+          d="M48 170 L40 262 L180 262 L172 170 Z"
+          fill="url(#penny-halftone)"
+        />
+
+        {/* Chest stripe — single rust accent */}
+        <rect x="92" y="208" width="36" height="10" fill={RUST} stroke={INK} strokeWidth="2.5" />
+        <rect x="92" y="208" width="36" height="3" fill={RUST_DARK} />
+
+        {/* Arms — blocky rectangles hanging */}
+        {pose !== 'eureka' && pose !== 'thinking' && (
+          <>
+            <rect x="30" y="178" width="24" height="70" fill={PARKA} stroke={INK} strokeWidth="3" />
+            <rect x="166" y="178" width="24" height="70" fill={PARKA} stroke={INK} strokeWidth="3" />
+            <rect x="30" y="178" width="24" height="70" fill="url(#penny-halftone)" />
+            <rect x="166" y="178" width="24" height="70" fill="url(#penny-halftone)" />
+          </>
+        )}
+        {pose === 'thinking' && (
+          <>
+            {/* Right arm hanging */}
+            <rect x="166" y="178" width="24" height="70" fill={PARKA} stroke={INK} strokeWidth="3" />
+            <rect x="166" y="178" width="24" height="70" fill="url(#penny-halftone)" />
+            {/* Left arm bent up — hand on chin */}
+            <path
+              d="M30 178 L54 178 L62 130 L42 128 Z"
+              fill={PARKA}
+              stroke={INK}
+              strokeWidth="3"
+            />
+            <path
+              d="M30 178 L54 178 L62 130 L42 128 Z"
+              fill="url(#penny-halftone)"
+            />
+          </>
+        )}
+        {pose === 'eureka' && (
+          <>
+            {/* Both arms up triumphantly */}
+            <path
+              d="M30 178 L54 178 L48 100 L26 105 Z"
+              fill={PARKA}
+              stroke={INK}
+              strokeWidth="3"
+            />
+            <path
+              d="M166 178 L190 178 L194 105 L172 100 Z"
+              fill={PARKA}
+              stroke={INK}
+              strokeWidth="3"
+            />
+            <path
+              d="M30 178 L54 178 L48 100 L26 105 Z"
+              fill="url(#penny-halftone)"
+            />
+            <path
+              d="M166 178 L190 178 L194 105 L172 100 Z"
+              fill="url(#penny-halftone)"
+            />
+          </>
+        )}
+
+        {/* Mittens — blocky */}
+        {pose === 'idle' && (
+          <>
+            <rect x="26" y="240" width="32" height="26" fill={MITTEN} stroke={INK} strokeWidth="3" />
+            <rect x="162" y="240" width="32" height="26" fill={MITTEN} stroke={INK} strokeWidth="3" />
+          </>
+        )}
+        {pose === 'sleep' && (
+          <>
+            <rect x="26" y="240" width="32" height="26" fill={MITTEN} stroke={INK} strokeWidth="3" />
+            <rect x="162" y="240" width="32" height="26" fill={MITTEN} stroke={INK} strokeWidth="3" />
+          </>
+        )}
+        {pose === 'sad' && (
+          <>
+            <rect x="26" y="244" width="32" height="26" fill={MITTEN} stroke={INK} strokeWidth="3" />
+            <rect x="162" y="244" width="32" height="26" fill={MITTEN} stroke={INK} strokeWidth="3" />
+          </>
+        )}
+        {pose === 'thinking' && (
+          <>
+            {/* Right mitten hanging */}
+            <rect x="162" y="240" width="32" height="26" fill={MITTEN} stroke={INK} strokeWidth="3" />
+            {/* Left mitten at chin */}
+            <rect x="48" y="116" width="28" height="22" fill={MITTEN} stroke={INK} strokeWidth="3" />
+          </>
+        )}
+        {pose === 'eureka' && (
+          <>
+            {/* Mittens at top of arms */}
+            <rect x="22" y="92" width="30" height="22" fill={MITTEN} stroke={INK} strokeWidth="3" />
+            <rect x="168" y="92" width="30" height="22" fill={MITTEN} stroke={INK} strokeWidth="3" />
+          </>
+        )}
+
+        {/* Hood — oval */}
+        <ellipse cx="110" cy="92" rx="68" ry="72" fill={HOOD} stroke={INK} strokeWidth="3" />
+        <ellipse cx="110" cy="92" rx="68" ry="72" fill="url(#penny-halftone)" opacity="0.5" />
+
+        {/* Hood inner shadow */}
+        <ellipse cx="110" cy="100" rx="50" ry="56" fill={HOOD_DARK} opacity="0.4" />
+
+        {/* Fur trim around hood — zigzag */}
+        <path
+          d="M44 88
+             L48 72 L56 86 L64 70 L72 84 L80 68 L88 84 L96 68 L104 86
+             L112 68 L120 86 L128 68 L136 84 L144 68 L152 84 L160 70 L168 86 L172 76
+             L174 110 L172 140 L168 160
+             L60 160 L48 140 L46 110 Z"
+          fill={FUR}
           stroke={INK}
           strokeWidth="2.5"
         />
-        <path d="M55 148 Q110 138 165 148" fill="none" stroke={SCARF_DARK} strokeWidth="2" />
-        <path d="M55 160 Q110 152 165 160" fill="none" stroke={SCARF_DARK} strokeWidth="2" />
 
-        {/* Scarf tail */}
-        <path
-          d="M150 158 L172 220 L156 224 L142 168 Z"
-          fill={SCARF}
-          stroke={INK}
-          strokeWidth="2.5"
-        />
-        <path d="M148 175 L165 215" fill="none" stroke={SCARF_DARK} strokeWidth="2" />
+        {/* Face — oval, smaller than hood, peeking out */}
+        <ellipse cx="110" cy="115" rx="38" ry="42" fill={SKIN} stroke={INK} strokeWidth="2.5" />
+        <ellipse cx="110" cy="115" rx="38" ry="42" fill="url(#penny-halftone)" opacity="0.4" />
 
-        {/* Head */}
-        <circle cx="110" cy="95" r="42" fill={SKIN} stroke={INK} strokeWidth="2.5" />
+        {/* Face shadow on bottom */}
+        <path d="M76 130 Q110 150 144 130 Q140 155 110 158 Q80 155 76 130 Z" fill={SKIN_SHADOW} opacity="0.4" />
 
-        {/* Beanie */}
-        <path
-          d="M68 80 Q72 38 110 32 Q148 38 152 80 Q150 84 110 76 Q70 84 68 80 Z"
-          fill={BEANIE}
-          stroke={INK}
-          strokeWidth="2.5"
-        />
-        <path d="M70 74 Q110 80 150 74" fill="none" stroke="#1f4a60" strokeWidth="1.5" />
-        {/* Pom-pom */}
-        <circle cx="110" cy="30" r="11" fill={POM} stroke={INK} strokeWidth="2.5" />
-        <path d="M104 28 Q110 34 116 30 M106 33 Q112 28 114 34" fill="none" stroke={INK} strokeOpacity="0.4" strokeWidth="1" />
+        {/* Cheeks — rust dot */}
+        <circle cx="82" cy="128" r="4" fill={RUST} opacity="0.55" />
+        <circle cx="138" cy="128" r="4" fill={RUST} opacity="0.55" />
 
-        {/* Cheeks */}
-        <ellipse cx="80" cy="108" rx="6" ry="4" fill={SCARF} opacity="0.45" />
-        <ellipse cx="140" cy="108" rx="6" ry="4" fill={SCARF} opacity="0.45" />
-
-        {/* Glasses (hidden when sleeping — replaced by closed eyes) */}
+        {/* Goggles (hidden when sleeping) */}
         {pose !== 'sleep' && (
           <>
-            <circle cx="92" cy="95" r="13" fill="#fff" stroke={INK} strokeWidth="2.5" />
-            <circle cx="128" cy="95" r="13" fill="#fff" stroke={INK} strokeWidth="2.5" />
-            <path d="M105 95 L115 95" stroke={INK} strokeWidth="2.5" />
-            {/* Eyes (different per pose) */}
+            <rect x="72" y="100" width="76" height="22" rx="3" fill={GOGGLE} stroke={INK} strokeWidth="3" />
+            <line x1="110" y1="100" x2="110" y2="122" stroke={INK} strokeWidth="3" />
+            {/* Goggle strap */}
+            <path d="M72 111 Q44 105 44 95" fill="none" stroke={INK} strokeWidth="2.5" />
+            <path d="M148 111 Q176 105 176 95" fill="none" stroke={INK} strokeWidth="2.5" />
+            {/* Goggle reflections */}
+            <path d="M78 105 L92 105" stroke={GOGGLE_HIGHLIGHT} strokeWidth="2.5" />
+            <path d="M76 110 L84 110" stroke={GOGGLE_HIGHLIGHT} strokeWidth="1.5" />
+            <path d="M118 105 L132 105" stroke={GOGGLE_HIGHLIGHT} strokeWidth="2.5" />
+            <path d="M116 110 L124 110" stroke={GOGGLE_HIGHLIGHT} strokeWidth="1.5" />
+            {/* Pupils per pose, visible through goggle */}
             {pose === 'idle' && (
               <>
-                <circle cx="92" cy="96" r="2.5" fill={INK} />
-                <circle cx="128" cy="96" r="2.5" fill={INK} />
+                <circle cx="92" cy="113" r="2" fill={INK} />
+                <circle cx="128" cy="113" r="2" fill={INK} />
               </>
             )}
             {pose === 'thinking' && (
               <>
-                <circle cx="95" cy="93" r="2.5" fill={INK} />
-                <circle cx="131" cy="93" r="2.5" fill={INK} />
+                <circle cx="96" cy="110" r="2" fill={INK} />
+                <circle cx="132" cy="110" r="2" fill={INK} />
               </>
             )}
             {pose === 'eureka' && (
               <>
-                {/* Star eyes */}
-                <path d="M92 90 L94 95 L99 95 L95 98 L96 103 L92 100 L88 103 L89 98 L85 95 L90 95 Z" fill={STAR} stroke={INK} strokeWidth="1" />
-                <path d="M128 90 L130 95 L135 95 L131 98 L132 103 L128 100 L124 103 L125 98 L121 95 L126 95 Z" fill={STAR} stroke={INK} strokeWidth="1" />
+                <path d="M92 108 L94 113 L99 113 L95 116 L96 121 L92 118 L88 121 L89 116 L85 113 L90 113 Z" fill={RUST} stroke={INK} strokeWidth="1" />
+                <path d="M128 108 L130 113 L135 113 L131 116 L132 121 L128 118 L124 121 L125 116 L121 113 L126 113 Z" fill={RUST} stroke={INK} strokeWidth="1" />
               </>
             )}
             {pose === 'sad' && (
               <>
-                <path d="M88 97 L96 92" stroke={INK} strokeWidth="2" fill="none" />
-                <path d="M124 92 L132 97" stroke={INK} strokeWidth="2" fill="none" />
+                <path d="M86 116 L98 109" stroke={INK} strokeWidth="2.5" />
+                <path d="M122 109 L134 116" stroke={INK} strokeWidth="2.5" />
               </>
             )}
-            {/* Frost on glasses */}
-            <path d="M85 88 L88 95 M90 86 L92 100 M100 90 L96 98" fill="none" stroke={FROST} strokeWidth="1.2" />
-            <path d="M122 86 L124 100 M132 88 L130 96 M136 92 L132 98" fill="none" stroke={FROST} strokeWidth="1.2" />
           </>
         )}
         {pose === 'sleep' && (
           <>
-            <path d="M82 95 Q92 102 102 95" stroke={INK} strokeWidth="2.5" fill="none" />
-            <path d="M118 95 Q128 102 138 95" stroke={INK} strokeWidth="2.5" fill="none" />
+            {/* Closed eyes — heavy curve lines */}
+            <path d="M78 113 Q92 122 106 113" stroke={INK} strokeWidth="3" fill="none" />
+            <path d="M114 113 Q128 122 142 113" stroke={INK} strokeWidth="3" fill="none" />
           </>
         )}
 
-        {/* Mouth + breath per pose */}
+        {/* Mouth per pose */}
         {pose === 'idle' && (
-          <>
-            <path d="M102 118 Q110 120 118 118" stroke={INK} strokeWidth="2" fill="none" />
-            <ellipse cx="140" cy="122" rx="9" ry="5" fill="#fff" opacity="0.55" />
-            <ellipse cx="153" cy="118" rx="5" ry="3" fill="#fff" opacity="0.4" />
-          </>
+          <rect x="100" y="140" width="20" height="4" rx="2" fill={INK} />
         )}
         {pose === 'thinking' && (
-          <>
-            <ellipse cx="110" cy="120" rx="3" ry="4" fill={INK} />
-            {/* Thought bubble */}
-            <circle cx="55" cy="60" r="3" fill="#fff" stroke={INK} strokeWidth="1.5" />
-            <circle cx="46" cy="48" r="5" fill="#fff" stroke={INK} strokeWidth="1.5" />
-            <circle cx="32" cy="30" r="9" fill="#fff" stroke={INK} strokeWidth="1.5" />
-            <text x="28" y="35" fontSize="11" fill={INK} fontFamily="Georgia, serif">$?</text>
-          </>
+          <ellipse cx="110" cy="142" rx="4" ry="5" fill={INK} />
         )}
         {pose === 'eureka' && (
           <>
-            <path d="M98 115 Q110 130 122 115" stroke={INK} strokeWidth="2.5" fill="#fff" />
-            <text x="30" y="50" fontSize="22" fill={STAR}>★</text>
-            <text x="170" y="40" fontSize="18" fill={STAR}>✦</text>
-            <text x="20" y="135" fontSize="14" fill={STAR}>✦</text>
+            <path d="M92 138 Q110 156 128 138 L128 142 Q110 158 92 142 Z" fill={INK} />
+            <path d="M96 142 Q110 152 124 142 Q110 148 96 142 Z" fill={RUST} />
           </>
         )}
         {pose === 'sad' && (
-          <>
-            <path d="M102 122 Q110 114 118 122" stroke={INK} strokeWidth="2" fill="none" />
-            <ellipse cx="93" cy="108" rx="1.8" ry="4" fill="#7aa8c0" />
-          </>
+          <path d="M96 148 Q110 138 124 148" stroke={INK} strokeWidth="3" fill="none" />
         )}
         {pose === 'sleep' && (
-          <>
-            <ellipse cx="108" cy="118" rx="5" ry="3" fill={INK} opacity="0.4" />
-            <text x="160" y="58" fontSize="24" fill={INK} fontFamily="Georgia, serif">Z</text>
-            <text x="180" y="38" fontSize="16" fill={INK} fontFamily="Georgia, serif">z</text>
-            <text x="194" y="22" fontSize="11" fill={INK} fontFamily="Georgia, serif">z</text>
-          </>
+          <ellipse cx="110" cy="144" rx="8" ry="3" fill={INK} opacity="0.5" />
         )}
 
-        {/* Mittens per pose */}
-        {pose === 'idle' && (
-          <>
-            <ellipse cx="48" cy="195" rx="14" ry="13" fill={SCARF} stroke={INK} strokeWidth="2.5" />
-            <ellipse cx="172" cy="195" rx="14" ry="13" fill={SCARF} stroke={INK} strokeWidth="2.5" />
-          </>
-        )}
+        {/* Pose-specific extras */}
         {pose === 'thinking' && (
-          <>
-            {/* Hand on chin */}
-            <ellipse cx="95" cy="138" rx="13" ry="12" fill={SCARF} stroke={INK} strokeWidth="2.5" />
-            {/* Other holding mini ledger */}
-            <rect x="148" y="200" width="36" height="26" fill="#f4ecd8" stroke={INK} strokeWidth="2" rx="2" />
-            <line x1="153" y1="208" x2="179" y2="208" stroke="#a89878" strokeWidth="1" />
-            <line x1="153" y1="213" x2="179" y2="213" stroke="#a89878" strokeWidth="1" />
-            <line x1="153" y1="218" x2="179" y2="218" stroke="#a89878" strokeWidth="1" />
-            <ellipse cx="172" cy="218" rx="13" ry="12" fill={SCARF} stroke={INK} strokeWidth="2.5" />
-          </>
+          <g>
+            {/* Big bold "?" */}
+            <text
+              x="22"
+              y="58"
+              fontSize="42"
+              fontFamily="Bowlby One, Arial Black, sans-serif"
+              fill={RUST}
+              stroke={INK}
+              strokeWidth="1.5"
+            >
+              ?
+            </text>
+          </g>
         )}
         {pose === 'eureka' && (
-          <>
-            <ellipse cx="40" cy="125" rx="14" ry="13" fill={SCARF} stroke={INK} strokeWidth="2.5" />
-            <ellipse cx="180" cy="125" rx="14" ry="13" fill={SCARF} stroke={INK} strokeWidth="2.5" />
-            <path d="M45 138 Q40 168 48 195" stroke={INK} strokeWidth="2" fill="none" />
-            <path d="M175 138 Q180 168 172 195" stroke={INK} strokeWidth="2" fill="none" />
-          </>
+          <g>
+            <text
+              x="14"
+              y="58"
+              fontSize="42"
+              fontFamily="Bowlby One, Arial Black, sans-serif"
+              fill={RUST}
+              stroke={INK}
+              strokeWidth="1.5"
+            >
+              !
+            </text>
+            <text
+              x="180"
+              y="48"
+              fontSize="32"
+              fontFamily="Bowlby One, Arial Black, sans-serif"
+              fill={RUST}
+              stroke={INK}
+              strokeWidth="1.5"
+            >
+              !
+            </text>
+          </g>
         )}
         {pose === 'sad' && (
-          <>
-            <ellipse cx="58" cy="218" rx="14" ry="13" fill={SCARF} stroke={INK} strokeWidth="2.5" />
-            <ellipse cx="162" cy="218" rx="14" ry="13" fill={SCARF} stroke={INK} strokeWidth="2.5" />
-          </>
+          <g>
+            {/* Single tear */}
+            <path d="M94 134 Q92 142 95 148 Q98 142 96 134 Z" fill={GOGGLE} stroke={INK} strokeWidth="1.5" />
+          </g>
         )}
         {pose === 'sleep' && (
-          <>
-            <ellipse cx="48" cy="200" rx="14" ry="13" fill={SCARF} stroke={INK} strokeWidth="2.5" />
-            <ellipse cx="172" cy="200" rx="14" ry="13" fill={SCARF} stroke={INK} strokeWidth="2.5" />
-          </>
+          <g>
+            <text
+              x="158"
+              y="62"
+              fontSize="28"
+              fontFamily="Bowlby One, Arial Black, sans-serif"
+              fill={INK}
+            >
+              Z
+            </text>
+            <text
+              x="178"
+              y="40"
+              fontSize="20"
+              fontFamily="Bowlby One, Arial Black, sans-serif"
+              fill={INK}
+            >
+              z
+            </text>
+            <text
+              x="192"
+              y="22"
+              fontSize="14"
+              fontFamily="Bowlby One, Arial Black, sans-serif"
+              fill={INK}
+            >
+              z
+            </text>
+          </g>
         )}
       </g>
     </svg>
