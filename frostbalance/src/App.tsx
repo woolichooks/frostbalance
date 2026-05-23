@@ -18,6 +18,8 @@ import {
 import { ResourcePanel } from './components/ResourcePanel';
 import { Timer } from './components/Timer';
 import { DayBriefing } from './components/DayBriefing';
+import { Penny, type PennyPose } from './components/Penny';
+import { FrostOverlay } from './components/FrostOverlay';
 import './App.css';
 
 type Phase = 'briefing' | 'playing' | 'solved' | 'timeout' | 'game-over';
@@ -172,8 +174,26 @@ function App() {
     [puzzle],
   );
 
+  const pennyPose: PennyPose = (() => {
+    if (phase === 'game-over') return 'sleep';
+    if (phase === 'solved') return 'eureka';
+    if (phase === 'timeout') return 'sad';
+    if (phase === 'briefing') return 'idle';
+    if (wrongFlash) return 'sad';
+    return 'thinking';
+  })();
+
+  const frostFraction =
+    phase === 'playing'
+      ? Math.max(0, Math.min(1, elapsedMs / puzzle.timeLimitMs)) * 0.85
+      : 0;
+
   return (
     <div className="app">
+      <FrostOverlay fraction={frostFraction} />
+      <div className={`penny-stage penny-stage-${pennyPose}`} aria-hidden="true">
+        <Penny pose={pennyPose} />
+      </div>
       <header className="app-header">
         <h1>Frostbalance</h1>
         <p className="tagline">

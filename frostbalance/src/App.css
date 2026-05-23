@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Caveat:wght@600&display=swap');
+
 :root {
   --paper: #f4ecd8;
   --paper-shadow: #e3d8bf;
@@ -9,6 +11,7 @@
   --warn: #b34b3a;
   --ok: #4e7a3a;
   --highlight: #ffe680;
+  --handwriting: 'Patrick Hand', 'Caveat', Georgia, serif;
 }
 
 * {
@@ -17,10 +20,29 @@
 
 body {
   margin: 0;
-  background: linear-gradient(180deg, #d9e6ec 0%, #c8d8df 100%);
+  background:
+    radial-gradient(ellipse at top, #e8f0f3 0%, transparent 70%),
+    linear-gradient(180deg, #d9e6ec 0%, #b8cdd6 100%);
   color: var(--ink);
-  font-family: 'Georgia', 'Cambria', serif;
+  font-family: var(--handwriting);
+  font-size: 17px;
   min-height: 100vh;
+  position: relative;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.06 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
+  opacity: 0.5;
+  z-index: 1;
+}
+
+.app {
+  position: relative;
+  z-index: 2;
 }
 
 .app {
@@ -49,12 +71,33 @@ body {
 }
 
 .card {
-  background: var(--paper);
+  background:
+    repeating-linear-gradient(
+      transparent 0px,
+      transparent 27px,
+      rgba(74, 122, 146, 0.08) 28px
+    ),
+    var(--paper);
   border: 1px solid var(--rule);
   border-radius: 4px;
   padding: 18px 20px;
   margin-bottom: 18px;
-  box-shadow: 2px 3px 0 var(--paper-shadow);
+  box-shadow:
+    2px 3px 0 var(--paper-shadow),
+    inset 0 0 30px rgba(201, 185, 148, 0.15);
+  position: relative;
+}
+
+.card.tb::before,
+.card.schedule::before {
+  content: '';
+  position: absolute;
+  left: 38px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(179, 75, 58, 0.35);
+  pointer-events: none;
 }
 
 .card h2 {
@@ -496,5 +539,118 @@ tr.ruled-out td {
   color: var(--ok);
   font-style: italic;
   font-weight: bold;
+}
+
+/* Penny */
+.penny-stage {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  width: 130px;
+  height: 165px;
+  z-index: 5;
+  pointer-events: none;
+  filter: drop-shadow(2px 4px 2px rgba(0, 0, 0, 0.15));
+}
+
+@media (max-width: 720px) {
+  .penny-stage {
+    width: 90px;
+    height: 115px;
+    bottom: 6px;
+    left: 6px;
+    opacity: 0.85;
+  }
+}
+
+.penny {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.penny-stage-idle .penny {
+  animation: penny-shiver 0.4s ease-in-out infinite alternate;
+}
+
+.penny-stage-thinking .penny {
+  animation: penny-think 3s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+.penny-stage-eureka .penny {
+  animation: penny-eureka 0.9s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: center bottom;
+}
+
+.penny-stage-sad .penny {
+  animation: penny-slump 0.5s ease-out forwards;
+  transform-origin: center bottom;
+}
+
+.penny-stage-sleep .penny {
+  animation: penny-breathe 3.5s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+@keyframes penny-shiver {
+  0% { transform: translate(0, 0) rotate(-0.6deg); }
+  100% { transform: translate(1px, -0.5px) rotate(0.6deg); }
+}
+
+@keyframes penny-think {
+  0%, 100% { transform: rotate(-2deg); }
+  50% { transform: rotate(2deg); }
+}
+
+@keyframes penny-eureka {
+  0% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-14px) scale(1.05); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes penny-slump {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(6px) scale(0.97); }
+}
+
+@keyframes penny-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.025); }
+}
+
+/* Frost overlay */
+.frost-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  transition: opacity 0.4s ease-out;
+}
+
+.frost-svg {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+}
+
+.frost-tl { top: 0; left: 0; }
+.frost-tr { top: 0; right: 0; transform: scaleX(-1); }
+.frost-bl { bottom: 0; left: 0; transform: scaleY(-1); }
+.frost-br { bottom: 0; right: 0; transform: scale(-1, -1); }
+
+/* Hand-stamped totals */
+.total-row.diff-row td.num {
+  font-family: var(--handwriting);
+  font-size: 18px;
+  color: var(--warn);
+  letter-spacing: 0.5px;
+  transform: rotate(-1.2deg);
+  display: inline-block;
+}
+
+.app-header h1 {
+  font-family: 'Caveat', cursive, Georgia, serif;
+  font-weight: 600;
 }
 
