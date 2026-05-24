@@ -282,15 +282,17 @@ function App() {
     [puzzle],
   );
 
-  // Sleep math: each resource changes by (earned this day for chosen − 1).
-  // The chosen resource gets +lastReward, then every resource decays by 1.
-  // Decay is always -1 per resource (4 total) since any resource already at
-  // zero would have triggered game-over before this preview ever shows.
+  // Receipt math, scoped to today's foraged resource only. Other resources
+  // decay by 1 behind the scenes; their new values surface on the next
+  // launch page's inventory strip.
   const sleepPreview = useMemo(() => {
-    const decayLoss = RESOURCES.length; // -1 per resource = -4
-    const net = lastReward - decayLoss;
-    return { net, decayLoss };
-  }, [lastReward]);
+    if (!chosenResource) return { earned: 0, decay: 1, net: -1, ending: 0 };
+    const beginning = resources[chosenResource];
+    const earned = lastReward;
+    const decay = 1;
+    const ending = Math.max(0, beginning + earned - decay);
+    return { earned, decay, net: earned - decay, ending };
+  }, [resources, chosenResource, lastReward]);
 
   const weather = weatherLabel(day);
   const locations = unlockedLocations(day);
@@ -637,25 +639,31 @@ function App() {
                 </div>
 
                 <div className="recv">
-                  <h3 className="recv-title">Supplies Returned</h3>
+                  <h3 className="recv-title">
+                    {chosenResource ? `${RESOURCE_LABEL[chosenResource]} ledger` : 'Today\'s ledger'}
+                  </h3>
                   {chosenResource && (
-                    <div className="recv-line">
-                      <span>{RESOURCE_LABEL[chosenResource]}</span>
-                      <span className={['v', lastReward > 0 ? 'up' : 'down'].join(' ')}>
-                        {lastReward > 0 ? `+${lastReward}` : '0'}
-                      </span>
-                    </div>
+                    <>
+                      <div className="recv-line">
+                        <span>Beginning</span>
+                        <span className="v">{resources[chosenResource]}</span>
+                      </div>
+                      <div className="recv-line">
+                        <span>Earned today</span>
+                        <span className={['v', sleepPreview.earned > 0 ? 'up' : ''].join(' ')}>
+                          {sleepPreview.earned > 0 ? `+${sleepPreview.earned}` : '0'}
+                        </span>
+                      </div>
+                      <div className="recv-line">
+                        <span>Daily decay</span>
+                        <span className="v down">−{sleepPreview.decay}</span>
+                      </div>
+                      <div className="recv-total">
+                        <span>Ending {RESOURCE_LABEL[chosenResource].toLowerCase()}</span>
+                        <span className="v">{sleepPreview.ending}</span>
+                      </div>
+                    </>
                   )}
-                  <div className="recv-line">
-                    <span>Daily decay</span>
-                    <span className="v down">−{sleepPreview.decayLoss}</span>
-                  </div>
-                  <div className="recv-total">
-                    <span>Net to stores</span>
-                    <span className={['v', sleepPreview.net >= 0 ? 'up' : 'down'].join(' ')}>
-                      {sleepPreview.net > 0 ? '+' : ''}{sleepPreview.net}
-                    </span>
-                  </div>
                 </div>
               </div>
 
