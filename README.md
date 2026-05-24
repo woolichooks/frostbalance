@@ -1,2 +1,2 @@
-# claudecode
-To house all of my claude code sessions
+# frostbalance
+A game where you reconcile to survive.
