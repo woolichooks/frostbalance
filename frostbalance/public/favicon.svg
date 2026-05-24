@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" fill="#eef1f3"/>
+  <rect x="1.5" y="1.5" width="29" height="29" fill="none" stroke="#0d1620" stroke-width="1"/>
+  <line x1="1.5" y1="22" x2="30.5" y2="22" stroke="#0d1620" stroke-width="1"/>
+  <text x="16" y="18" font-family="Archivo Black, Arial Black, sans-serif" font-weight="900" font-size="13" text-anchor="middle" fill="#0d1620" letter-spacing="-0.5">FB</text>
+  <text x="16" y="29" font-family="JetBrains Mono, monospace" font-size="6" text-anchor="middle" fill="#1e4a6e" letter-spacing="0.5">2027</text>
+</svg>
