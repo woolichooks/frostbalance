@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { advanceToNextError, generatePuzzle } from './engine/generator';
 import { journalEntry } from './engine/journal';
+import { unlockedLocations } from './engine/locations';
 import type { Puzzle } from './engine/types';
 import { fmt, signedFmt } from './engine/format';
 import type { Resource, Tier } from './engine/survival';
@@ -8,6 +9,8 @@ import {
   HINT_FUEL_COST,
   INITIAL_RESOURCES,
   RESOURCE_LABEL,
+  RESOURCE_BLURB,
+  RESOURCES,
   TIER_CONFIGS,
   WRONG_PENALTY_MS,
   computeReward,
@@ -16,12 +19,8 @@ import {
   isStarved,
   tierForDay,
 } from './engine/survival';
-import { ResourcePanel } from './components/ResourcePanel';
-import { Timer } from './components/Timer';
-import { DayBriefing } from './components/DayBriefing';
-import { Penny, type PennyPose } from './components/Penny';
-import { FrostOverlay } from './components/FrostOverlay';
-import { TopBar } from './components/TopBar';
+import { InventoryStrip } from './components/InventoryStrip';
+import { DuskMeter } from './components/DuskMeter';
 import { SettingsModal } from './components/SettingsModal';
 import { GlossaryModal } from './components/GlossaryModal';
 import { IntroModal } from './components/IntroModal';
@@ -50,6 +49,18 @@ import './App.css';
 
 type Phase = 'briefing' | 'playing' | 'solved' | 'timeout' | 'game-over';
 
+const padTwo = (n: number): string => String(n).padStart(2, '0');
+
+const docNumber = (day: number): string =>
+  `FB-2027-${String(day).padStart(3, '0')}`;
+
+const weatherLabel = (day: number): { label: string; temp: number } => {
+  // Cosmetic: cycle through a couple of cold weathers
+  const cycle = ['SNOW', 'CLEAR', 'BLIZZARD', 'SLEET'];
+  const temp = -(8 + ((day * 3) % 14));
+  return { label: cycle[day % cycle.length], temp };
+};
+
 function App() {
   const [day, setDay] = useState(1);
   const [resources, setResources] = useState(INITIAL_RESOURCES);
@@ -67,7 +78,6 @@ function App() {
 
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [selectedFixId, setSelectedFixId] = useState<string | null>(null);
-  const [wrongFlash, setWrongFlash] = useState(false);
   const [wrongAttempts, setWrongAttempts] = useState(0);
   const [ruledOut, setRuledOut] = useState<Set<string>>(new Set());
   const [hintsUsed, setHintsUsed] = useState(0);
@@ -102,8 +112,6 @@ function App() {
     cls.toggle('reduced-motion', settings.reducedMotion);
   }, [settings]);
 
-  // nowTick is bumped every 100ms while playing; including it in deps
-  // forces this memo to recompute against a fresh Date.now() each tick.
   const elapsedMs = useMemo(() => {
     if (timerStart === null) return 0;
     const ref = timerFrozenAt ?? Date.now();
@@ -114,7 +122,6 @@ function App() {
   const currentTier: Tier = tierForDay(day);
   const tierConfig = TIER_CONFIGS[currentTier];
 
-  // Drive background music from the phase
   useEffect(() => {
     if (phase === 'briefing') setMusicState('briefing');
     else if (phase === 'playing') setMusicState('playing');
@@ -123,7 +130,6 @@ function App() {
     else if (phase === 'game-over') setMusicState('gameover');
   }, [phase]);
 
-  // Final-10s tick + duck the music for the final stretch
   const lastTickSecond = useRef<number>(-1);
   useEffect(() => {
     if (phase !== 'playing') {
@@ -145,7 +151,6 @@ function App() {
     }
   }, [phase, elapsedMs, puzzle.timeLimitMs]);
 
-  // Timeout detection
   useEffect(() => {
     if (phase === 'playing' && elapsedMs >= puzzle.timeLimitMs) {
       setTimerFrozenAt(Date.now());
@@ -213,7 +218,6 @@ function App() {
     const rowRight = selectedRowId === puzzle.errorTransactionId;
     const fixRight = selectedFixId === puzzle.correctFixId;
     if (rowRight && fixRight) {
-      // Boss puzzle: more errors waiting. Advance and keep playing.
       if (puzzle.pendingErrors.length > 0) {
         setPuzzle((p) => advanceToNextError(p));
         setSelectedRowId(null);
@@ -235,9 +239,8 @@ function App() {
       setWrongAttempts((n) => n + 1);
       setPenaltyMs((p) => p + WRONG_PENALTY_MS);
       setSelectedFixId(null);
-      setWrongFlash(true);
       if (flashTimeout.current) window.clearTimeout(flashTimeout.current);
-      flashTimeout.current = window.setTimeout(() => setWrongFlash(false), 600);
+      flashTimeout.current = window.setTimeout(() => {}, 600);
       playWrongThunk();
     }
   };
@@ -279,47 +282,17 @@ function App() {
     [puzzle],
   );
 
-  const pennyPose: PennyPose = (() => {
-    if (phase === 'game-over') return 'sleep';
-    if (phase === 'solved') return 'eureka';
-    if (phase === 'timeout') return 'sad';
-    if (phase === 'briefing') return 'idle';
-    if (wrongFlash) return 'sad';
-    return 'thinking';
-  })();
-
-  const frostFraction =
-    phase === 'playing'
-      ? Math.max(0, Math.min(1, elapsedMs / puzzle.timeLimitMs)) * 0.85
-      : 0;
+  const weather = weatherLabel(day);
+  const locations = unlockedLocations(day);
+  const totalSec = Math.ceil(Math.max(0, puzzle.timeLimitMs - elapsedMs) / 1000);
 
   return (
     <div className="app">
-      <svg className="svg-defs" aria-hidden="true">
-        <defs>
-          <filter id="text-chip" x="-2%" y="-2%" width="104%" height="104%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" seed="7" />
-            <feDisplacementMap in="SourceGraphic" scale="1.6" />
-          </filter>
-        </defs>
-      </svg>
-      <FrostOverlay fraction={frostFraction} />
-      <TopBar
-        onOpenSettings={() => setShowSettings(true)}
-        onOpenGlossary={() => setShowGlossary(true)}
-      />
-      <div className={`penny-stage penny-stage-${pennyPose}`} aria-hidden="true">
-        <Penny pose={pennyPose} />
-      </div>
+      {/* Modals */}
       {showIntro && (
         <IntroModal
-          onDismiss={() => {
-            markIntroSeen();
-            setShowIntro(false);
-          }}
-          onOpenGlossary={() => {
-            setShowGlossary(true);
-          }}
+          onDismiss={() => { markIntroSeen(); setShowIntro(false); }}
+          onOpenGlossary={() => setShowGlossary(true)}
         />
       )}
       {showSettings && (
@@ -330,281 +303,413 @@ function App() {
         />
       )}
       {showGlossary && <GlossaryModal onClose={() => setShowGlossary(false)} />}
-      <header className="app-header">
-        <h1>Frostbalance</h1>
-        <p className="tagline">
-          Day {day} · Tier {currentTier} — {tierConfig.label}
-        </p>
-        <p className="flavor">{tierConfig.flavor}</p>
+
+      {/* Registration marks */}
+      <div className="regmark tl" aria-hidden="true" />
+      <div className="regmark tr" aria-hidden="true" />
+      <div className="regmark bl" aria-hidden="true" />
+      <div className="regmark br" aria-hidden="true" />
+
+      {/* CHROME */}
+      <header className="chrome">
+        <div className="wordmark">
+          <span className="wordmark-mark">Frost—Balance</span>
+          <span className="wordmark-sub">A Cold Ledger</span>
+        </div>
+        <div className="day-stamp">
+          <span>Day</span>
+          <span className="day-stamp-n">{padTwo(day)}</span>
+        </div>
+        <div className="chrome-meta">
+          <span className={`weather ${weather.label.toLowerCase()}`}>
+            <span className="weather-sw" />
+            <span>{weather.label} · {weather.temp}°</span>
+          </span>
+          <span>Phase · <b>{phase === 'briefing' ? 'LAUNCH' : phase === 'playing' ? 'AUDIT' : phase === 'solved' ? 'CLOSE' : phase === 'timeout' ? 'DUSK' : 'COLD'}</b></span>
+          <span>Doc № <b>{docNumber(day)}</b></span>
+        </div>
       </header>
 
-      <ResourcePanel resources={resources} highlight={chosenResource} />
+      {/* INVENTORY */}
+      <InventoryStrip resources={resources} highlight={chosenResource} />
 
+      {/* BODY */}
       {phase === 'briefing' && (
-        <DayBriefing
-          day={day}
-          resources={resources}
-          selected={chosenResource}
-          journalLine={journalEntry(day)}
-          todaysBest={todaysBest}
-          onSelect={setChosenResource}
-          onBegin={beginDay}
-        />
+        <main className="app-body launch">
+          <section className="pane">
+            <div className="hero">
+              <div className="hero-kicker">
+                <span className="dot" />
+                <span>Day {padTwo(day)} · Tier {currentTier} — {tierConfig.label}</span>
+              </div>
+              <h1>
+                What are you<br />
+                <em>foraging for?</em>
+              </h1>
+              <p className="journal">"{journalEntry(day)}"</p>
+              <p className="hero-blurb">
+                Reconcile the books to bring back supplies. Faster solves bring back more.
+                Everything ticks down at dusk.
+              </p>
+              {todaysBest && (
+                <p className="best-record">
+                  Fastest reconciliation today:{' '}
+                  <strong>{(todaysBest.timeMs / 1000).toFixed(1)}s</strong>
+                  {' '}— Tier {todaysBest.tier}, day {todaysBest.day}.
+                </p>
+              )}
+              <div className="resource-choices">
+                {RESOURCES.map((r) => {
+                  const v = resources[r];
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      className={[
+                        'resource-choice',
+                        chosenResource === r ? 'chosen' : '',
+                        v <= 2 ? 'urgent' : '',
+                      ].join(' ')}
+                      onClick={() => setChosenResource(r)}
+                    >
+                      <span className="resource-choice-head">
+                        <span>{RESOURCE_LABEL[r]}</span>
+                        <span className="resource-choice-count">have {padTwo(v)}</span>
+                      </span>
+                      <span className="resource-choice-blurb">{RESOURCE_BLURB[r]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+          <section className="pane">
+            <div className="sites-header">
+              <span className="sites-title">Sites you can scavenge today</span>
+              <span className="sites-count">{locations.length} found</span>
+            </div>
+            <ul className="sites-list">
+              {locations.map((loc, i) => (
+                <li className="site" key={loc.id}>
+                  <span className="site-num">S-{padTwo((i + 1) * 4 + 3)}</span>
+                  <div>
+                    <div className="site-title">{loc.name}</div>
+                    <div className="site-desc">{loc.blurb}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="btn-row">
+              <button
+                className="btn"
+                disabled={!chosenResource}
+                onClick={beginDay}
+              >
+                <span>
+                  Begin the day{chosenResource ? ` · forage ${RESOURCE_LABEL[chosenResource]}` : ''}
+                </span>
+                <span className="arrow">→</span>
+              </button>
+              <div className="btn-row-caption">
+                {chosenResource ? 'Hold steady. Sign here when ready.' : 'Pick a resource on the left to proceed.'}
+              </div>
+            </div>
+          </section>
+        </main>
       )}
 
-      {(phase === 'playing' || phase === 'solved' || phase === 'timeout') && (
-        <>
-          <section className="card scenario">
-            <div className="scenario-header">
-              <div>
-                <h2>Today's reconciliation</h2>
-                <p className="scenario-location">
-                  Scavenged from <strong>{puzzle.locationName}</strong>
-                  {puzzle.totalErrors > 1 && (
-                    <span className="boss-tag">
-                      {' '}· FINAL AUDIT · Error {puzzle.currentErrorIndex + 1} of {puzzle.totalErrors}
-                    </span>
-                  )}
-                </p>
-              </div>
-              <Timer
-                elapsedMs={elapsedMs}
-                limitMs={puzzle.timeLimitMs}
-                flashing={wrongFlash}
-              />
+      {phase === 'playing' && (
+        <main className="app-body puzzle">
+          <section className="pane">
+            <div className="section-head">
+              <span className="section-head-title">Today's Reconciliation</span>
+              <span className="section-head-meta">
+                GL · {puzzle.scenario.prepaidAccount} · {puzzle.scenario.vendor}
+                {puzzle.totalErrors > 1 && (
+                  <> · <b>FINAL AUDIT · Error {puzzle.currentErrorIndex + 1}/{puzzle.totalErrors}</b></>
+                )}
+              </span>
             </div>
-            <p>
-              You paid <strong>{puzzle.scenario.vendor}</strong>{' '}
-              {fmt(puzzle.scenario.annualAmount)} for a{' '}
-              {puzzle.scenario.monthsTotal}-month {puzzle.scenario.itemNoun} on{' '}
-              {puzzle.openingEntry.date}. It's now{' '}
-              {puzzle.scenario.monthsElapsed} months in. Trial balance:{' '}
-              <strong>{fmt(puzzle.trialBalance)}</strong>. Schedule total:{' '}
-              <strong>{fmt(puzzle.scheduleBalance)}</strong>. Discrepancy:{' '}
-              <strong>{signedFmt(puzzle.discrepancy)}</strong>.
-            </p>
-            <p className="prompt">
-              {puzzle.totalErrors > 1
-                ? 'Two errors hide in this consolidated audit. Fix them one at a time. The timer never stops.'
-                : 'Find the offending row, then pick the fix.'}
+
+            <div className="trial">
+              <div className="trial-grid">
+                <span className="trial-acc">{puzzle.scenario.prepaidAccount}</span>
+                <span className="trial-amt">{fmt(puzzle.trialBalance)}</span>
+                <span className="trial-acc">{puzzle.scenario.expenseAccount}</span>
+                <span className="trial-amt">
+                  {fmt((puzzle.scenario.annualAmount / puzzle.scenario.monthsTotal) * puzzle.scenario.monthsElapsed)}
+                </span>
+              </div>
+              <div className="trial-note">Trial Balance · Source of truth</div>
+            </div>
+
+            <p className="scenario-brief">
+              Paid <b>{fmt(puzzle.scenario.annualAmount)}</b> for a {puzzle.scenario.monthsTotal}-month{' '}
+              {puzzle.scenario.itemNoun} on {puzzle.openingEntry.date}. Now{' '}
+              <b>{puzzle.scenario.monthsElapsed} months in</b>. Schedule and ledger disagree.
               {wrongAttempts > 0 && (
                 <span className="penalty-note">
-                  {' '}
-                  Wrong attempts: {wrongAttempts} · −
-                  {(wrongAttempts * WRONG_PENALTY_MS) / 1000}s penalty applied.
+                  · {wrongAttempts} wrong · −{(wrongAttempts * WRONG_PENALTY_MS) / 1000}s
                 </span>
               )}
             </p>
-            {phase === 'playing' && puzzle.hintsAllowed > 0 && (
+
+            <table className="sched">
+              <thead>
+                <tr>
+                  <th style={{ width: 36 }}>#</th>
+                  <th style={{ width: 110 }}>Date</th>
+                  <th>Description</th>
+                  <th className="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scheduleRows.map((t, i) => {
+                  const isOpening = i === 0;
+                  const isSelected = selectedRowId === t.id;
+                  const isRuledOut = ruledOut.has(t.id);
+                  const clickable = !isOpening && !isRuledOut;
+                  return (
+                    <tr
+                      key={t.id}
+                      className={[
+                        isOpening ? 'opening' : clickable ? 'clickable' : '',
+                        isSelected ? 'selected' : '',
+                        isRuledOut ? 'ruled-out' : '',
+                      ].join(' ')}
+                      onClick={() => clickable && onPickRow(t.id)}
+                    >
+                      <td>{isOpening ? '—' : i}</td>
+                      <td>{t.date}</td>
+                      <td>
+                        {t.description}
+                        {isRuledOut && <span className="ruled-tag"> ✓ clean</span>}
+                      </td>
+                      <td className="num">
+                        {isOpening ? fmt(t.amount) : `(${fmt(t.amount)})`}
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr className="total-row">
+                  <td colSpan={3}>Ending balance per schedule</td>
+                  <td className="num">{fmt(puzzle.scheduleBalance)}</td>
+                </tr>
+                <tr className="total-row tb-row">
+                  <td colSpan={3}>Trial balance</td>
+                  <td className="num">{fmt(puzzle.trialBalance)}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div className="discrep">
+              <span className="discrep-label">
+                Schedule {fmt(puzzle.scheduleBalance)} − Trial {fmt(puzzle.trialBalance)} · Discrepancy
+              </span>
+              <span className="discrep-value">{signedFmt(puzzle.discrepancy)}</span>
+            </div>
+          </section>
+
+          <section className="pane">
+            <div className="section-head">
+              <span className="section-head-title">How do you fix it?</span>
+              <span className="section-head-meta">
+                {selectedRowId ? 'Choose 01' : 'Select a row first'}
+              </span>
+            </div>
+
+            <p className="scenario-brief" style={{ marginTop: 0 }}>
+              {selectedRowId
+                ? <>Flagged: row{' '}
+                    <b>{scheduleRows.findIndex((r) => r.id === selectedRowId)}</b>{' '}
+                    · {scheduleRows.find((r) => r.id === selectedRowId)?.date}</>
+                : 'Click the offending row in the schedule on the left.'}
+            </p>
+
+            <div className="fixes">
+              {puzzle.fixes.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  className={['fix-option', selectedFixId === f.id ? 'checked' : ''].join(' ')}
+                  onClick={() => onPickFix(f.id)}
+                  disabled={!selectedRowId}
+                >
+                  <div className="radio" />
+                  <div>
+                    <div className="fix-option-text">{f.label}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {puzzle.hintsAllowed > 0 && (
               <div className="hint-bar">
                 <button
                   type="button"
+                  className="hint-button"
                   onClick={onUseHint}
-                  disabled={
-                    hintsUsed >= puzzle.hintsAllowed ||
-                    resources.fuel < HINT_FUEL_COST
-                  }
-                  title={
-                    resources.fuel < HINT_FUEL_COST
-                      ? 'Not enough fuel'
-                      : 'Rule out a row that reconciles cleanly'
-                  }
+                  disabled={hintsUsed >= puzzle.hintsAllowed || resources.fuel < HINT_FUEL_COST}
                 >
-                  Burn a log for a hint ({hintsUsed}/{puzzle.hintsAllowed} used · costs{' '}
-                  {HINT_FUEL_COST} fuel)
+                  Burn a log · hint ({hintsUsed}/{puzzle.hintsAllowed})
                 </button>
                 <span className="hint-explainer">
-                  Marks one clean row as ruled out.
+                  Costs {HINT_FUEL_COST} fuel · rules out a clean row.
                 </span>
               </div>
             )}
+
+            <div className="btn-row">
+              <button
+                className="btn"
+                onClick={onSubmit}
+                disabled={!selectedRowId || !selectedFixId}
+              >
+                <span>Submit Reconciliation</span>
+                <span className="arrow">↵</span>
+              </button>
+              <div className="btn-row-caption">
+                Field guide · Discrepancies under $1 may still mean a math fault.
+              </div>
+            </div>
           </section>
+        </main>
+      )}
 
-          <div className="two-col">
-            <section className="card tb">
-              <h2>Trial Balance</h2>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Account</th>
-                    <th className="num">Balance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>{puzzle.scenario.prepaidAccount}</td>
-                    <td className="num">{fmt(puzzle.trialBalance)}</td>
-                  </tr>
-                  <tr>
-                    <td>{puzzle.scenario.expenseAccount}</td>
-                    <td className="num">
-                      {fmt(
-                        (puzzle.scenario.annualAmount / 12) *
-                          puzzle.scenario.monthsElapsed,
-                      )}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <p className="hint">Per the GL — source of truth.</p>
-            </section>
+      {(phase === 'solved' || phase === 'timeout') && (
+        <main className="app-body feedback">
+          <div className="result">
+            <div className="result-head">
+              <div>
+                <div className="result-eyebrow">
+                  Day {padTwo(day)} · {phase === 'solved' ? 'Closing' : 'Sunset'}
+                </div>
+                <div className={['result-verdict', phase === 'timeout' ? 'bad' : ''].join(' ')}>
+                  Books<br />
+                  <em>{phase === 'solved' ? 'balanced.' : 'open.'}</em>
+                </div>
+                {newRecord && <p className="new-record">★ New fastest today</p>}
+              </div>
+              <div className="result-eyebrow" style={{ textAlign: 'right' }}>
+                {phase === 'solved' ? 'Filed at' : 'Walked away at'}<br />
+                <b>{(lastSolveMs / 1000).toFixed(1)}s on the ledger</b>
+              </div>
+            </div>
 
-            <section className={['card', 'schedule', wrongFlash ? 'shake' : ''].join(' ')}>
-              <h2>{puzzle.scenario.prepaidAccount} — Schedule</h2>
-              <table>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Date</th>
-                    <th>Description</th>
-                    <th className="num">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {scheduleRows.map((t, i) => {
-                    const isOpening = i === 0;
-                    const isSelected = selectedRowId === t.id;
-                    const isRuledOut = ruledOut.has(t.id);
-                    const reveal = phase === 'solved' || phase === 'timeout';
-                    const showCorrect = reveal && t.id === puzzle.errorTransactionId;
-                    const clickable = !isOpening && phase === 'playing' && !isRuledOut;
-                    return (
-                      <tr
-                        key={t.id}
-                        className={[
-                          isOpening ? 'opening' : clickable ? 'clickable' : '',
-                          isSelected ? 'selected' : '',
-                          showCorrect ? 'flag-correct' : '',
-                          isRuledOut ? 'ruled-out' : '',
-                        ].join(' ')}
-                        onClick={() => clickable && onPickRow(t.id)}
-                      >
-                        <td>{isOpening ? '—' : i}</td>
-                        <td>{t.date}</td>
-                        <td>
-                          {t.description}
-                          {isRuledOut && <span className="ruled-tag"> ✓ clean</span>}
-                        </td>
-                        <td className="num">
-                          {isOpening ? fmt(t.amount) : `(${fmt(t.amount)})`}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  <tr className="total-row">
-                    <td colSpan={3}>Ending balance per schedule</td>
-                    <td className="num">{fmt(puzzle.scheduleBalance)}</td>
-                  </tr>
-                  <tr className="total-row tb-row">
-                    <td colSpan={3}>Trial balance</td>
-                    <td className="num">{fmt(puzzle.trialBalance)}</td>
-                  </tr>
-                  <tr className="total-row diff-row">
-                    <td colSpan={3}>Discrepancy</td>
-                    <td className="num">{signedFmt(puzzle.discrepancy)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </section>
+            <div className="result-body">
+              <div className="receipt">
+                <div className="recv">
+                  <h3 className="recv-title">Reconciliation Receipt</h3>
+                  <div className="recv-line">
+                    <span>Schedule reconciled</span>
+                    <span className="v">{phase === 'solved' ? '✓ closed' : '✗ unresolved'}</span>
+                  </div>
+                  <div className="recv-line">
+                    <span>Time on the ledger</span>
+                    <span className="v">{(lastSolveMs / 1000).toFixed(1)}s</span>
+                  </div>
+                  <div className="recv-line">
+                    <span>Error row</span>
+                    <span className="v">
+                      {phase === 'solved' || phase === 'timeout'
+                        ? `row ${scheduleRows.findIndex((r) => r.id === puzzle.errorTransactionId)}`
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className="recv-line">
+                    <span>Correct amount</span>
+                    <span className="v">{fmt(puzzle.correctAmount)}</span>
+                  </div>
+                  <div className="recv-line">
+                    <span>Site</span>
+                    <span className="v">{puzzle.locationName}</span>
+                  </div>
+                </div>
+
+                <div className="recv">
+                  <h3 className="recv-title">Supplies Returned</h3>
+                  {chosenResource && (
+                    <div className="recv-line">
+                      <span>{RESOURCE_LABEL[chosenResource]}</span>
+                      <span className={['v', lastReward > 0 ? 'up' : 'down'].join(' ')}>
+                        {lastReward > 0 ? `+${lastReward}` : '0'}
+                      </span>
+                    </div>
+                  )}
+                  <div className="recv-line">
+                    <span>Daily decay (all)</span>
+                    <span className="v down">−1 each</span>
+                  </div>
+                  <div className="recv-total">
+                    <span>Net to stores</span>
+                    <span className="v">
+                      {(lastReward > 0 ? lastReward : 0) - 4 >= 0 ? '+' : ''}
+                      {(lastReward > 0 ? lastReward : 0) - 4}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="field-note">
+                {phase === 'solved'
+                  ? '— The town goes to sleep. The frost does not. —'
+                  : '— The numbers will not warm you. —'}
+              </div>
+
+              <button className="btn" onClick={onSleep}>
+                <span>Sleep · wake on Day {padTwo(day + 1)}</span>
+                <span className="arrow">→</span>
+              </button>
+            </div>
           </div>
-
-          {phase === 'playing' && selectedRowId && (
-            <section className="card fixes">
-              <h2>How do you fix it?</h2>
-              <ul>
-                {puzzle.fixes.map((f) => {
-                  const checked = selectedFixId === f.id;
-                  return (
-                    <li
-                      key={f.id}
-                      className={['fix-option', checked ? 'checked' : ''].join(' ')}
-                    >
-                      <label>
-                        <input
-                          type="radio"
-                          name="fix"
-                          value={f.id}
-                          checked={checked}
-                          onChange={() => onPickFix(f.id)}
-                        />
-                        {f.label}
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
-              <div className="actions">
-                <button
-                  className="primary"
-                  onClick={onSubmit}
-                  disabled={!selectedFixId}
-                >
-                  Submit reconciliation
-                </button>
-              </div>
-            </section>
-          )}
-
-          {phase === 'solved' && chosenResource && (
-            <section className="card feedback ok">
-              <h2>Reconciled in {(lastSolveMs / 1000).toFixed(1)}s.</h2>
-              {newRecord && <p className="new-record">★ New fastest today ★</p>}
-              <p>
-                You found <strong>{lastReward}</strong>{' '}
-                {lastReward === 1 ? 'unit' : 'units'} of{' '}
-                <strong>{RESOURCE_LABEL[chosenResource]}</strong>.
-              </p>
-              <p className="hint">
-                Row{' '}
-                {scheduleRows.findIndex((r) => r.id === puzzle.errorTransactionId)}{' '}
-                was off by {signedFmt(puzzle.discrepancy)}. Correct amount:{' '}
-                <strong>{fmt(puzzle.correctAmount)}</strong>.
-              </p>
-              <div className="actions">
-                <button className="primary" onClick={onSleep}>
-                  Sleep through the night →
-                </button>
-              </div>
-            </section>
-          )}
-
-          {phase === 'timeout' && (
-            <section className="card feedback bad">
-              <h2>The sun set on your ledger.</h2>
-              <p>
-                Time ran out. The books never tied. You bring back{' '}
-                <strong>nothing</strong>.
-              </p>
-              <p className="hint">
-                The error was on row{' '}
-                {scheduleRows.findIndex((r) => r.id === puzzle.errorTransactionId)}
-                . Correct amount: <strong>{fmt(puzzle.correctAmount)}</strong>.
-              </p>
-              <div className="actions">
-                <button className="primary" onClick={onSleep}>
-                  Trudge home empty-handed →
-                </button>
-              </div>
-            </section>
-          )}
-        </>
+        </main>
       )}
 
       {phase === 'game-over' && starvedOf && (
-        <section className="card feedback bad game-over">
-          <h2>You ran out of {RESOURCE_LABEL[starvedOf].toLowerCase()}.</h2>
-          <p>
-            You made it <strong>{day}</strong>{' '}
-            {day === 1 ? 'day' : 'days'} in the cold with a ledger and a
-            pencil. That's something.
-          </p>
-          <div className="actions">
-            <button className="primary" onClick={onRestart}>
-              Start over
-            </button>
+        <main className="app-body gameover">
+          <div className="result">
+            <div className="result-head">
+              <div>
+                <div className="result-eyebrow">Day {padTwo(day)} · Final entry</div>
+                <div className="result-verdict bad">
+                  Out of<br />
+                  <em>{RESOURCE_LABEL[starvedOf].toLowerCase()}.</em>
+                </div>
+              </div>
+              <div className="result-eyebrow" style={{ textAlign: 'right' }}>
+                Survived<br /><b>{day} days</b>
+              </div>
+            </div>
+            <div className="result-body">
+              <p className="hero-blurb" style={{ maxWidth: 540, margin: '0 auto', textAlign: 'center' }}>
+                You made it {day} {day === 1 ? 'day' : 'days'} in the cold with a ledger and a pencil.
+                That's something.
+              </p>
+              <button className="btn" onClick={onRestart}>
+                <span>Start over</span>
+                <span className="arrow">↻</span>
+              </button>
+            </div>
           </div>
-        </section>
+        </main>
       )}
+
+      {/* FOOTER */}
+      {phase === 'playing' ? (
+        <DuskMeter elapsedMs={elapsedMs} limitMs={puzzle.timeLimitMs} />
+      ) : (
+        <nav className="app-nav">
+          <button type="button" className="nav-link" onClick={() => setShowGlossary(true)}>
+            ◾ Field Guide
+          </button>
+          <button type="button" className="nav-link" onClick={() => setShowSettings(true)}>
+            Preferences ◾
+          </button>
+        </nav>
+      )}
+
+      {/* Suppress no-unused warnings */}
+      {false && <span>{totalSec}</span>}
     </div>
   );
 }
