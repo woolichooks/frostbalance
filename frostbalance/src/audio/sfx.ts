@@ -8,7 +8,7 @@
 let audioCtx: AudioContext | null = null;
 let master: GainNode | null = null;
 let muted = false;
-let volume = 0.5;
+let volume = 0.7;
 
 const getCtx = (): AudioContext | null => {
   if (typeof window === 'undefined') return null;
@@ -16,19 +16,23 @@ const getCtx = (): AudioContext | null => {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AC) return null;
     audioCtx = new AC();
-    // Master gain → compressor → destination. Compressor evens out the
-    // perceived loudness across cues so small speakers actually push
-    // air, without clipping on headphones.
+    // master → compressor → makeup gain → destination.
+    // The compressor evens out peaks; makeup gain restores (and exceeds)
+    // the original level so small speakers actually push air. Without
+    // makeup, a compressor only ever makes things quieter.
     const compressor = audioCtx.createDynamicsCompressor();
-    compressor.threshold.value = -18;
-    compressor.knee.value = 12;
-    compressor.ratio.value = 4;
+    compressor.threshold.value = -22;
+    compressor.knee.value = 10;
+    compressor.ratio.value = 3.5;
     compressor.attack.value = 0.003;
     compressor.release.value = 0.18;
+    const makeup = audioCtx.createGain();
+    makeup.gain.value = 2.6;
     master = audioCtx.createGain();
     master.gain.value = muted ? 0 : volume;
     master.connect(compressor);
-    compressor.connect(audioCtx.destination);
+    compressor.connect(makeup);
+    makeup.connect(audioCtx.destination);
   }
   if (audioCtx.state === 'suspended') {
     audioCtx.resume().catch(() => {});
