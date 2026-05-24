@@ -33,6 +33,17 @@ const getCtx = (): AudioContext | null => {
     master.connect(compressor);
     compressor.connect(makeup);
     makeup.connect(audioCtx.destination);
+
+    // iOS Safari warm-up: some versions don't actually enable audio
+    // output until a (silent) buffer plays. Has to happen inside the
+    // same user-gesture tick as the context creation.
+    try {
+      const warmupBuf = audioCtx.createBuffer(1, 1, 22050);
+      const warmupSrc = audioCtx.createBufferSource();
+      warmupSrc.buffer = warmupBuf;
+      warmupSrc.connect(audioCtx.destination);
+      warmupSrc.start();
+    } catch {}
   }
   if (audioCtx.state === 'suspended') {
     audioCtx.resume().catch(() => {});
@@ -87,22 +98,22 @@ export const playIceTap = (): void => {
   osc.stop(t + 0.12);
 };
 
-// Heavier thunk for wrong submission — voiced in the midrange so it
-// survives a phone speaker. Square wave gives plenty of harmonics
-// above the speaker's HPF.
+// Heavier thunk for wrong submission — voiced in the phone-friendly
+// band (800–500Hz). Square wave's odd harmonics push the perceived
+// "wrongness" while staying in the speaker's sweet spot.
 export const playWrongThunk = (): void => {
   const ctx = getCtx();
   if (!ctx || !master) return;
   const osc = ctx.createOscillator();
   osc.type = 'square';
   const t = ctx.currentTime;
-  osc.frequency.setValueAtTime(520, t);
-  osc.frequency.exponentialRampToValueAtTime(260, t + 0.28);
+  osc.frequency.setValueAtTime(820, t);
+  osc.frequency.exponentialRampToValueAtTime(500, t + 0.28);
   const filter = ctx.createBiquadFilter();
   filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(2400, t);
-  filter.frequency.exponentialRampToValueAtTime(900, t + 0.28);
-  const g = env(ctx, 0.005, 0.5, 0.3);
+  filter.frequency.setValueAtTime(3000, t);
+  filter.frequency.exponentialRampToValueAtTime(1400, t + 0.28);
+  const g = env(ctx, 0.005, 0.55, 0.3);
   osc.connect(filter).connect(g).connect(master);
   osc.start(t);
   osc.stop(t + 0.32);
@@ -128,29 +139,34 @@ export const playEurekaChime = (): void => {
   });
 };
 
-// Horn for timeout — moved up into the mid-bass + low-mid so small
-// speakers can actually reproduce it. Triangle wave keeps it round.
+// Horn for timeout — fundamental + fifth, both in the 600–1000Hz
+// band where phone speakers actually push air. Sawtooth gives a horn-
+// like brass timbre without needing real sub-bass.
 export const playTimeoutHorn = (): void => {
   const ctx = getCtx();
   if (!ctx || !master) return;
   const t = ctx.currentTime;
-  // Fundamental in the low-mid (small speakers handle 300Hz+ fine)
   const osc = ctx.createOscillator();
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(330, t);
-  osc.frequency.linearRampToValueAtTime(220, t + 1.4);
-  // Fifth above for harmonic weight; also audible on small drivers
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(660, t);
+  osc.frequency.linearRampToValueAtTime(440, t + 1.4);
   const osc2 = ctx.createOscillator();
-  osc2.type = 'triangle';
-  osc2.frequency.setValueAtTime(495, t);
-  osc2.frequency.linearRampToValueAtTime(330, t + 1.4);
+  osc2.type = 'sawtooth';
+  osc2.frequency.setValueAtTime(990, t);
+  osc2.frequency.linearRampToValueAtTime(660, t + 1.4);
+  // Soft lowpass to take the edge off the saw harmonics
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 2800;
+  filter.Q.value = 0.7;
   const g = ctx.createGain();
   g.gain.setValueAtTime(0, t);
-  g.gain.linearRampToValueAtTime(0.55, t + 0.12);
-  g.gain.linearRampToValueAtTime(0.42, t + 1.0);
+  g.gain.linearRampToValueAtTime(0.5, t + 0.12);
+  g.gain.linearRampToValueAtTime(0.38, t + 1.0);
   g.gain.exponentialRampToValueAtTime(0.001, t + 1.6);
-  osc.connect(g).connect(master);
-  osc2.connect(g);
+  osc.connect(filter);
+  osc2.connect(filter);
+  filter.connect(g).connect(master);
   osc.start(t);
   osc2.start(t);
   osc.stop(t + 1.65);
@@ -188,8 +204,9 @@ export const playHintBurn = (): void => {
   src.start();
 };
 
-// Wind whoosh for sleeping through the night — sweep ends in the
-// low-mid (350Hz) rather than sub-bass.
+// Wind whoosh for sleeping through the night — bandpass through the
+// midrange so phone speakers actually hear the wind, not a low rumble
+// they can't reproduce.
 export const playSleepWhoosh = (): void => {
   const ctx = getCtx();
   if (!ctx || !master) return;
@@ -197,13 +214,14 @@ export const playSleepWhoosh = (): void => {
   const src = ctx.createBufferSource();
   src.buffer = buf;
   const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
+  filter.type = 'bandpass';
   const t = ctx.currentTime;
-  filter.frequency.setValueAtTime(2400, t);
-  filter.frequency.exponentialRampToValueAtTime(350, t + 0.9);
+  filter.frequency.setValueAtTime(2800, t);
+  filter.frequency.exponentialRampToValueAtTime(900, t + 0.9);
+  filter.Q.value = 1.5;
   const g = ctx.createGain();
   g.gain.setValueAtTime(0, t);
-  g.gain.linearRampToValueAtTime(0.28, t + 0.15);
+  g.gain.linearRampToValueAtTime(0.4, t + 0.15);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.95);
   src.connect(filter).connect(g).connect(master);
   src.start();
