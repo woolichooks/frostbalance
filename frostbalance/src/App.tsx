@@ -282,6 +282,24 @@ function App() {
     [puzzle],
   );
 
+  // Preview the resource math that onSleep will apply. Decay clamps at 0,
+  // so a resource already at zero contributes nothing to the loss tally.
+  const sleepPreview = useMemo(() => {
+    let next = resources;
+    if (chosenResource && lastReward > 0) {
+      next = grantReward(next, chosenResource, lastReward);
+    }
+    const afterReward = next;
+    next = dailyDecay(next);
+    const beforeTotal = Object.values(resources).reduce((s, v) => s + v, 0);
+    const afterTotal = Object.values(next).reduce((s, v) => s + v, 0);
+    const decayLoss = RESOURCES.reduce(
+      (s, r) => s + Math.min(afterReward[r], 1),
+      0,
+    );
+    return { net: afterTotal - beforeTotal, decayLoss };
+  }, [resources, chosenResource, lastReward]);
+
   const weather = weatherLabel(day);
   const locations = unlockedLocations(day);
   const totalSec = Math.ceil(Math.max(0, puzzle.timeLimitMs - elapsedMs) / 1000);
@@ -637,14 +655,13 @@ function App() {
                     </div>
                   )}
                   <div className="recv-line">
-                    <span>Daily decay (all)</span>
-                    <span className="v down">−1 each</span>
+                    <span>Daily decay</span>
+                    <span className="v down">−{sleepPreview.decayLoss}</span>
                   </div>
                   <div className="recv-total">
                     <span>Net to stores</span>
-                    <span className="v">
-                      {(lastReward > 0 ? lastReward : 0) - 4 >= 0 ? '+' : ''}
-                      {(lastReward > 0 ? lastReward : 0) - 4}
+                    <span className={['v', sleepPreview.net >= 0 ? 'up' : 'down'].join(' ')}>
+                      {sleepPreview.net > 0 ? '+' : ''}{sleepPreview.net}
                     </span>
                   </div>
                 </div>
