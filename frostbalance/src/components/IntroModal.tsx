@@ -34,8 +34,9 @@ export function IntroModal({ onDismiss, onOpenGlossary }: Props) {
           </p>
         </div>
         <div className="modal-actions">
-          <button className="primary" onClick={onDismiss}>
-            Begin
+          <button className="btn" onClick={onDismiss}>
+            <span>Begin</span>
+            <span className="arrow">→</span>
           </button>
         </div>
       </div>

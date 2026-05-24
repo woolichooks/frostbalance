@@ -73,7 +73,10 @@ export function GlossaryModal({ onClose }: Props) {
           ))}
         </dl>
         <div className="modal-actions">
-          <button className="primary" onClick={onClose}>Got it</button>
+          <button className="btn" onClick={onClose}>
+            <span>Got it</span>
+            <span className="arrow">↵</span>
+          </button>
         </div>
       </div>
     </div>

@@ -104,7 +104,10 @@ export function SettingsModal({ settings, onChange, onClose }: Props) {
         </section>
 
         <div className="modal-actions">
-          <button className="primary" onClick={onClose}>Done</button>
+          <button className="btn" onClick={onClose}>
+            <span>Done</span>
+            <span className="arrow">↵</span>
+          </button>
         </div>
       </div>
     </div>
