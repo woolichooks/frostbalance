@@ -10,7 +10,6 @@ type WeatherConfig = {
   sizeMin: number;
   sizeMax: number;
   opacity: number;
-  /** When true, draw short angled streaks instead of dots (rain/sleet feel) */
   streak: boolean;
 };
 
@@ -36,10 +35,19 @@ const CONFIGS: Record<WeatherKind, WeatherConfig> = {
 type Props = {
   weather: WeatherKind;
   reducedMotion?: boolean;
+  /** 0..1. Boosts particle count + speed (timer-driven). */
+  intensity?: number;
 };
 
-export function SnowParticles({ weather, reducedMotion }: Props) {
+export function SnowParticles({ weather, reducedMotion, intensity = 0 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const intensityRef = useRef(intensity);
+
+  // Push the latest intensity into the ref so the animation loop reads
+  // fresh values without needing to restart.
+  useEffect(() => {
+    intensityRef.current = Math.max(0, Math.min(1, intensity));
+  }, [intensity]);
 
   useEffect(() => {
     if (reducedMotion) return;
@@ -49,15 +57,6 @@ export function SnowParticles({ weather, reducedMotion }: Props) {
     if (!ctx) return;
 
     const cfg = CONFIGS[weather];
-    if (cfg.count === 0) {
-      // Clear canvas and bail
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = window.innerWidth * dpr;
-      canvas.height = window.innerHeight * dpr;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
-
     const dpr = window.devicePixelRatio || 1;
     let w = window.innerWidth;
     let h = window.innerHeight;
@@ -73,8 +72,17 @@ export function SnowParticles({ weather, reducedMotion }: Props) {
     };
     resize();
 
+    if (cfg.count === 0) {
+      ctx.clearRect(0, 0, w, h);
+      return;
+    }
+
     type P = { x: number; y: number; vx: number; vy: number; r: number };
-    const particles: P[] = Array.from({ length: cfg.count }, () => ({
+    // Pre-allocate up to 2.5× base count so intensity can scale up
+    // without popping new particles in at random screen positions.
+    const baseCount = cfg.count;
+    const maxCount = Math.round(cfg.count * 2.5);
+    const particles: P[] = Array.from({ length: maxCount }, () => ({
       x: Math.random() * w,
       y: Math.random() * h,
       vx: (Math.random() - 0.5) * 0.4 + cfg.windX,
@@ -84,39 +92,43 @@ export function SnowParticles({ weather, reducedMotion }: Props) {
 
     let raf = 0;
     const tick = () => {
+      const I = intensityRef.current;
+      const speedMult = 1 + I * 2.0; // up to 3× at full intensity
+      const visibleCount = Math.round(baseCount + I * (maxCount - baseCount));
+
       ctx.clearRect(0, 0, w, h);
+
+      // Update every particle's position so any that become visible later
+      // are already mid-fall rather than spawning at random spots.
+      for (let i = 0; i < maxCount; i++) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy * speedMult;
+        if (p.y > h + 10) {
+          p.y = -10;
+          p.x = Math.random() * w;
+        }
+        if (p.x > w + 10) p.x = -10;
+        if (p.x < -10) p.x = w + 10;
+      }
 
       if (cfg.streak) {
         ctx.strokeStyle = `rgba(200, 220, 232, ${cfg.opacity})`;
         ctx.lineWidth = 1;
         ctx.lineCap = 'round';
-        for (const p of particles) {
-          p.x += p.vx;
-          p.y += p.vy;
-          if (p.y > h + 10) {
-            p.y = -10;
-            p.x = Math.random() * w;
-          }
-          if (p.x > w + 10) p.x = -10;
-          if (p.x < -10) p.x = w + 10;
+        for (let i = 0; i < visibleCount; i++) {
+          const p = particles[i];
           ctx.beginPath();
           const dx = p.vx * 2;
-          const dy = p.vy * 2;
+          const dy = p.vy * 2 * speedMult;
           ctx.moveTo(p.x, p.y);
           ctx.lineTo(p.x - dx, p.y - dy);
           ctx.stroke();
         }
       } else {
         ctx.fillStyle = `rgba(245, 250, 252, ${cfg.opacity})`;
-        for (const p of particles) {
-          p.x += p.vx;
-          p.y += p.vy;
-          if (p.y > h + 10) {
-            p.y = -10;
-            p.x = Math.random() * w;
-          }
-          if (p.x > w + 10) p.x = -10;
-          if (p.x < -10) p.x = w + 10;
+        for (let i = 0; i < visibleCount; i++) {
+          const p = particles[i];
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
           ctx.fill();

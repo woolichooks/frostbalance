@@ -298,6 +298,10 @@ function App() {
   const locations = unlockedLocations(day);
   const totalSec = Math.ceil(Math.max(0, puzzle.timeLimitMs - elapsedMs) / 1000);
 
+  const snowIntensity = phase === 'playing'
+    ? Math.max(0, Math.min(1, elapsedMs / puzzle.timeLimitMs))
+    : 0;
+
   return (
     <div className="app">
       {/* Modals */}
@@ -316,7 +320,11 @@ function App() {
       )}
       {showGlossary && <GlossaryModal onClose={() => setShowGlossary(false)} />}
 
-      <SnowParticles weather={weather.label} reducedMotion={settings.reducedMotion} />
+      <SnowParticles
+        weather={weather.label}
+        intensity={snowIntensity}
+        reducedMotion={settings.reducedMotion}
+      />
 
       {/* Registration marks */}
       <div className="regmark tl" aria-hidden="true" />
