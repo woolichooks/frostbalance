@@ -21,7 +21,19 @@ import { Timer } from './components/Timer';
 import { DayBriefing } from './components/DayBriefing';
 import { Penny, type PennyPose } from './components/Penny';
 import { FrostOverlay } from './components/FrostOverlay';
-import { AudioControls } from './components/AudioControls';
+import { TopBar } from './components/TopBar';
+import { SettingsModal } from './components/SettingsModal';
+import { GlossaryModal } from './components/GlossaryModal';
+import { IntroModal } from './components/IntroModal';
+import {
+  loadSettings,
+  loadTodaysBest,
+  markIntroSeen,
+  recordSolve,
+  saveSettings,
+  introSeen,
+  type Settings,
+} from './settings';
 import {
   ensureAudioReady,
   playEurekaChime,
@@ -32,7 +44,8 @@ import {
   playTimeoutHorn,
   playWrongThunk,
 } from './audio/sfx';
-import { setMusicDucked, setMusicState } from './audio/music';
+import { setMusicDucked, setMusicMuted, setMusicState, setMusicVolume } from './audio/music';
+import { setSfxMuted, setSfxVolume } from './audio/sfx';
 import './App.css';
 
 type Phase = 'briefing' | 'playing' | 'solved' | 'timeout' | 'game-over';
@@ -43,6 +56,14 @@ function App() {
   const [phase, setPhase] = useState<Phase>('briefing');
   const [chosenResource, setChosenResource] = useState<Resource | null>(null);
   const [puzzle, setPuzzle] = useState<Puzzle>(() => generatePuzzle(1, 1));
+
+  // Settings + onboarding
+  const [settings, setSettings] = useState<Settings>(() => loadSettings());
+  const [showIntro, setShowIntro] = useState<boolean>(() => !introSeen());
+  const [showSettings, setShowSettings] = useState(false);
+  const [showGlossary, setShowGlossary] = useState(false);
+  const [todaysBest, setTodaysBest] = useState(() => loadTodaysBest());
+  const [newRecord, setNewRecord] = useState(false);
 
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [selectedFixId, setSelectedFixId] = useState<string | null>(null);
@@ -67,6 +88,19 @@ function App() {
     const id = window.setInterval(() => setNowTick((n) => n + 1), 100);
     return () => window.clearInterval(id);
   }, [phase]);
+
+  // Apply settings: persist, push to audio engines, toggle body classes.
+  useEffect(() => {
+    saveSettings(settings);
+    setSfxVolume(settings.audioVolume);
+    setMusicVolume(settings.audioVolume * 0.3);
+    setSfxMuted(settings.audioMuted);
+    setMusicMuted(settings.audioMuted);
+    const cls = document.body.classList;
+    cls.toggle('dyslexia-font', settings.dyslexiaFont);
+    cls.toggle('high-contrast', settings.highContrast);
+    cls.toggle('reduced-motion', settings.reducedMotion);
+  }, [settings]);
 
   // nowTick is bumped every 100ms while playing; including it in deps
   // forces this memo to recompute against a fresh Date.now() each tick.
@@ -194,6 +228,9 @@ function App() {
       setLastReward(computeReward(elapsed, puzzle.timeLimitMs, tierConfig.rewardBonus));
       setPhase('solved');
       playEurekaChime();
+      const improved = recordSolve(elapsed, puzzle.tier, day);
+      setNewRecord(improved);
+      if (improved) setTodaysBest({ timeMs: elapsed, tier: puzzle.tier, day });
     } else {
       setWrongAttempts((n) => n + 1);
       setPenaltyMs((p) => p + WRONG_PENALTY_MS);
@@ -223,6 +260,7 @@ function App() {
     setChosenResource(null);
     setLastReward(0);
     setLastSolveMs(0);
+    setNewRecord(false);
     setPhase('briefing');
   };
 
@@ -266,10 +304,32 @@ function App() {
         </defs>
       </svg>
       <FrostOverlay fraction={frostFraction} />
-      <AudioControls />
+      <TopBar
+        onOpenSettings={() => setShowSettings(true)}
+        onOpenGlossary={() => setShowGlossary(true)}
+      />
       <div className={`penny-stage penny-stage-${pennyPose}`} aria-hidden="true">
         <Penny pose={pennyPose} />
       </div>
+      {showIntro && (
+        <IntroModal
+          onDismiss={() => {
+            markIntroSeen();
+            setShowIntro(false);
+          }}
+          onOpenGlossary={() => {
+            setShowGlossary(true);
+          }}
+        />
+      )}
+      {showSettings && (
+        <SettingsModal
+          settings={settings}
+          onChange={setSettings}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
+      {showGlossary && <GlossaryModal onClose={() => setShowGlossary(false)} />}
       <header className="app-header">
         <h1>Frostbalance</h1>
         <p className="tagline">
@@ -286,6 +346,7 @@ function App() {
           resources={resources}
           selected={chosenResource}
           journalLine={journalEntry(day)}
+          todaysBest={todaysBest}
           onSelect={setChosenResource}
           onBegin={beginDay}
         />
@@ -487,6 +548,7 @@ function App() {
           {phase === 'solved' && chosenResource && (
             <section className="card feedback ok">
               <h2>Reconciled in {(lastSolveMs / 1000).toFixed(1)}s.</h2>
+              {newRecord && <p className="new-record">★ New fastest today ★</p>}
               <p>
                 You found <strong>{lastReward}</strong>{' '}
                 {lastReward === 1 ? 'unit' : 'units'} of{' '}

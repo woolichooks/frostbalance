@@ -1,22 +1,31 @@
 import type { Resource } from '../engine/survival';
 import { RESOURCES, RESOURCE_LABEL, RESOURCE_BLURB } from '../engine/survival';
 import { unlockedLocations } from '../engine/locations';
+import type { BestRecord } from '../settings';
 
 type Props = {
   day: number;
   resources: Record<Resource, number>;
   selected: Resource | null;
   journalLine: string;
+  todaysBest: BestRecord | null;
   onSelect: (r: Resource) => void;
   onBegin: () => void;
 };
 
-export function DayBriefing({ day, resources, selected, journalLine, onSelect, onBegin }: Props) {
+export function DayBriefing({ day, resources, selected, journalLine, todaysBest, onSelect, onBegin }: Props) {
   const locations = unlockedLocations(day);
   return (
     <section className="card briefing">
       <h2>Day {day} — what are you foraging for?</h2>
       <p className="journal">"{journalLine}"</p>
+      {todaysBest && (
+        <p className="best-record">
+          Today's fastest reconciliation:{' '}
+          <strong>{(todaysBest.timeMs / 1000).toFixed(1)}s</strong>
+          {' '}— Tier {todaysBest.tier}, in-game day {todaysBest.day}.
+        </p>
+      )}
       <p className="prompt">
         Reconcile the books to bring back supplies. Faster solves bring back more.
         Everything ticks down at dusk.
