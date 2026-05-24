@@ -1100,6 +1100,16 @@ button {
   padding: 8px 0;
 }
 
+/* ─── Snow particles ─────────────────────────────────────── */
+.snow-particles {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 4;
+}
+
 /* ─── Registration marks ─────────────────────────────────── */
 .regmark {
   position: fixed;

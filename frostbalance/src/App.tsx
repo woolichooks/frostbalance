@@ -21,6 +21,7 @@ import {
 } from './engine/survival';
 import { InventoryStrip } from './components/InventoryStrip';
 import { DuskMeter } from './components/DuskMeter';
+import { SnowParticles, type WeatherKind } from './components/SnowParticles';
 import { SettingsModal } from './components/SettingsModal';
 import { GlossaryModal } from './components/GlossaryModal';
 import { IntroModal } from './components/IntroModal';
@@ -54,9 +55,8 @@ const padTwo = (n: number): string => String(n).padStart(2, '0');
 const docNumber = (day: number): string =>
   `FB-2027-${String(day).padStart(3, '0')}`;
 
-const weatherLabel = (day: number): { label: string; temp: number } => {
-  // Cosmetic: cycle through a couple of cold weathers
-  const cycle = ['SNOW', 'CLEAR', 'BLIZZARD', 'SLEET'];
+const weatherLabel = (day: number): { label: WeatherKind; temp: number } => {
+  const cycle: WeatherKind[] = ['SNOW', 'CLEAR', 'BLIZZARD', 'SLEET'];
   const temp = -(8 + ((day * 3) % 14));
   return { label: cycle[day % cycle.length], temp };
 };
@@ -315,6 +315,8 @@ function App() {
         />
       )}
       {showGlossary && <GlossaryModal onClose={() => setShowGlossary(false)} />}
+
+      <SnowParticles weather={weather.label} reducedMotion={settings.reducedMotion} />
 
       {/* Registration marks */}
       <div className="regmark tl" aria-hidden="true" />
