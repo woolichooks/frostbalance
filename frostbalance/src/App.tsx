@@ -282,23 +282,15 @@ function App() {
     [puzzle],
   );
 
-  // Preview the resource math that onSleep will apply. Decay clamps at 0,
-  // so a resource already at zero contributes nothing to the loss tally.
+  // Sleep math: each resource changes by (earned this day for chosen − 1).
+  // The chosen resource gets +lastReward, then every resource decays by 1.
+  // Decay is always -1 per resource (4 total) since any resource already at
+  // zero would have triggered game-over before this preview ever shows.
   const sleepPreview = useMemo(() => {
-    let next = resources;
-    if (chosenResource && lastReward > 0) {
-      next = grantReward(next, chosenResource, lastReward);
-    }
-    const afterReward = next;
-    next = dailyDecay(next);
-    const beforeTotal = Object.values(resources).reduce((s, v) => s + v, 0);
-    const afterTotal = Object.values(next).reduce((s, v) => s + v, 0);
-    const decayLoss = RESOURCES.reduce(
-      (s, r) => s + Math.min(afterReward[r], 1),
-      0,
-    );
-    return { net: afterTotal - beforeTotal, decayLoss };
-  }, [resources, chosenResource, lastReward]);
+    const decayLoss = RESOURCES.length; // -1 per resource = -4
+    const net = lastReward - decayLoss;
+    return { net, decayLoss };
+  }, [lastReward]);
 
   const weather = weatherLabel(day);
   const locations = unlockedLocations(day);
