@@ -89,7 +89,7 @@ export function SettingsModal({ settings, onChange, onClose }: Props) {
           <label className="setting-row">
             <span>
               Reduced motion
-              <span className="setting-hint">Disables Penny animations and screen shake.</span>
+              <span className="setting-hint">Disables animations.</span>
             </span>
             <button
               type="button"
