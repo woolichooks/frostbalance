@@ -7,7 +7,7 @@ export type Settings = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  audioVolume: 0.4,
+  audioVolume: 0.55,
   audioMuted: false,
   dyslexiaFont: false,
   highContrast: false,
