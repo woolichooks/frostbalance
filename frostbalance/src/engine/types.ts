@@ -35,11 +35,25 @@ export type PuzzleError = {
   correctFixId: string;
 };
 
-export type Puzzle = {
+/**
+ * Kinds of puzzle the game can present. Add a string here, then add a
+ * matching variant to the Puzzle union below + a view in
+ * src/components/puzzles/. Locations declare which kinds they offer
+ * via Location.puzzleKinds.
+ */
+export type PuzzleKind = 'prepaid';
+
+type PuzzleCommon = {
   id: string;
   tier: 1 | 2 | 3 | 4 | 5;
   timeLimitMs: number;
   hintsAllowed: number;
+  locationName: string;
+  locationBlurb: string;
+};
+
+export type PrepaidPuzzle = PuzzleCommon & {
+  kind: 'prepaid';
   scenario: Scenario;
   openingEntry: Transaction;
   amortizationEntries: Transaction[];
@@ -56,6 +70,11 @@ export type Puzzle = {
   totalErrors: number;
   /** Index of the currently-active error (0-based). */
   currentErrorIndex: number;
-  locationName: string;
-  locationBlurb: string;
 };
+
+/**
+ * Discriminated union of every puzzle kind. Add a `| FooPuzzle` here
+ * when a new kind ships and TypeScript will surface every site that
+ * needs to handle the new variant.
+ */
+export type Puzzle = PrepaidPuzzle;

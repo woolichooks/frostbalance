@@ -5,6 +5,7 @@ import type {
   Account,
   Discrepancy,
   FixOption,
+  PrepaidPuzzle,
   Puzzle,
   PuzzleError,
   Scenario,
@@ -178,9 +179,28 @@ const applyDecoys = (
   });
 };
 
+/**
+ * Public puzzle factory. Picks a location for the day, then picks one
+ * of that location's allowed puzzle kinds, then routes to the matching
+ * per-kind generator. Add a new branch here when a new PuzzleKind ships.
+ */
 export const generatePuzzle = (tier: Tier = 1, day = 1): Puzzle => {
+  const location = pickLocation(day);
+  const kind = pick(location.puzzleKinds);
+  switch (kind) {
+    case 'prepaid':
+      return generatePrepaidPuzzle(tier, location);
+    default: {
+      // Exhaustiveness check: when a new PuzzleKind is added without a
+      // case here, TS will complain.
+      const _exhaustive: never = kind;
+      throw new Error(`Unknown puzzle kind: ${_exhaustive}`);
+    }
+  }
+};
+
+const generatePrepaidPuzzle = (tier: Tier, location: Location): PrepaidPuzzle => {
   const cfg = getCfg(tier);
-  const location: Location = pickLocation(day);
   const template = pick(location.templates);
   const { scenario, openingEntry, amortizationEntries, monthly, annual } = buildScenario(
     template,
@@ -216,6 +236,7 @@ export const generatePuzzle = (tier: Tier = 1, day = 1): Puzzle => {
   const [first, ...rest] = injectedErrors;
 
   return {
+    kind: 'prepaid',
     id: `puzzle-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     tier,
     timeLimitMs: cfg.timeLimitMs,
@@ -239,11 +260,11 @@ export const generatePuzzle = (tier: Tier = 1, day = 1): Puzzle => {
 };
 
 /**
- * Apply the player's correct fix to the current puzzle and advance to
- * the next pending error (boss puzzles). Returns the updated puzzle.
- * Caller should only invoke this when there is at least one pending error.
+ * Boss-puzzle advance: apply the just-fixed error and surface the next
+ * one. Prepaid-only for now; future kinds with multi-error boss
+ * variants will add their own advance functions.
  */
-export const advanceToNextError = (puzzle: Puzzle): Puzzle => {
+export const advancePrepaidPuzzle = (puzzle: PrepaidPuzzle): PrepaidPuzzle => {
   if (puzzle.pendingErrors.length === 0) return puzzle;
   const fixedEntries = puzzle.amortizationEntries.map((t) =>
     t.id === puzzle.errorTransactionId ? { ...t, amount: puzzle.correctAmount } : t,

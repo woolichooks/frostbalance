@@ -1,4 +1,4 @@
-import type { Account } from './types';
+import type { Account, PuzzleKind } from './types';
 
 export type ScenarioTemplate = {
   prepaidAccount: Account;
@@ -14,6 +14,8 @@ export type Location = {
   blurb: string;
   unlockDay: number;
   templates: ScenarioTemplate[];
+  /** Puzzle kinds this site can serve. Generator picks one per visit. */
+  puzzleKinds: PuzzleKind[];
 };
 
 export const LOCATIONS: Location[] = [
@@ -22,6 +24,7 @@ export const LOCATIONS: Location[] = [
     name: 'Abandoned CPA Office',
     blurb: 'Cubicle skeletons. Dead plants. The 10-keys still click.',
     unlockDay: 1,
+    puzzleKinds: ['prepaid'],
     templates: [
       {
         prepaidAccount: 'Prepaid Insurance',
@@ -58,6 +61,7 @@ export const LOCATIONS: Location[] = [
     name: 'Frozen Warehouse',
     blurb: 'Forklifts in ice. Pallet jacks fused to the floor. The freezer is louder than the wind.',
     unlockDay: 4,
+    puzzleKinds: ['prepaid'],
     templates: [
       {
         prepaidAccount: 'Prepaid Cold Storage',
@@ -94,6 +98,7 @@ export const LOCATIONS: Location[] = [
     name: 'IRS Bunker',
     blurb: 'Concrete corridors. The Form 1120s are alphabetized. Somewhere, a deadline is still being missed.',
     unlockDay: 8,
+    puzzleKinds: ['prepaid'],
     templates: [
       {
         prepaidAccount: 'Prepaid Federal Lease',
