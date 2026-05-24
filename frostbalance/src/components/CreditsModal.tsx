@@ -31,7 +31,6 @@ export function CreditsModal({ onClose }: Props) {
             </a>
           </p>
           <p>Software: Claude Code</p>
-          <p>Music: Artlist.io</p>
           <p className="credits-sparkle">*:･ﾟ✧*:･ﾟ✧</p>
         </div>
         <div className="modal-actions">
