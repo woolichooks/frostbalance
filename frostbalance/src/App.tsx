@@ -25,6 +25,7 @@ import { SnowParticles, type WeatherKind } from './components/SnowParticles';
 import { SettingsModal } from './components/SettingsModal';
 import { GlossaryModal } from './components/GlossaryModal';
 import { IntroModal } from './components/IntroModal';
+import { CreditsModal } from './components/CreditsModal';
 import {
   loadSettings,
   loadTodaysBest,
@@ -73,6 +74,7 @@ function App() {
   const [showIntro, setShowIntro] = useState<boolean>(() => !introSeen());
   const [showSettings, setShowSettings] = useState(false);
   const [showGlossary, setShowGlossary] = useState(false);
+  const [showCredits, setShowCredits] = useState(false);
   const [todaysBest, setTodaysBest] = useState(() => loadTodaysBest());
   const [newRecord, setNewRecord] = useState(false);
 
@@ -319,6 +321,7 @@ function App() {
         />
       )}
       {showGlossary && <GlossaryModal onClose={() => setShowGlossary(false)} />}
+      {showCredits && <CreditsModal onClose={() => setShowCredits(false)} />}
 
       <SnowParticles
         weather={weather.label}
@@ -728,6 +731,9 @@ function App() {
         <nav className="app-nav">
           <button type="button" className="nav-link" onClick={() => setShowGlossary(true)}>
             ◾ Field Guide
+          </button>
+          <button type="button" className="nav-link credits-link-btn" onClick={() => setShowCredits(true)}>
+            Credits
           </button>
           <button type="button" className="nav-link" onClick={() => setShowSettings(true)}>
             Preferences ◾
